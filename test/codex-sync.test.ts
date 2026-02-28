@@ -333,62 +333,127 @@ describe("codex-sync", () => {
 		});
 	});
 
+	it("prefers fresher duplicate email cache entries across sources", async () => {
+		const codexDir = await createCodexDir("codex-sync-cache-fresh-duplicate");
+		const nowSeconds = Math.floor(Date.now() / 1000);
+		const staleAuthAccessToken = createJwt({
+			exp: nowSeconds + 300,
+			"https://api.openai.com/auth": {
+				chatgpt_account_id: "stale-auth-acc",
+				chatgpt_user_email: "fresh@example.com",
+			},
+		});
+		await writeFile(
+			join(codexDir, "auth.json"),
+			JSON.stringify(
+				{
+					auth_mode: "chatgpt",
+					tokens: {
+						access_token: staleAuthAccessToken,
+						refresh_token: "stale-auth-refresh",
+					},
+				},
+				null,
+				2,
+			),
+			"utf-8",
+		);
+
+		const freshLegacyAccessToken = createJwt({
+			exp: nowSeconds + 7200,
+			email: "fresh@example.com",
+			"https://api.openai.com/auth": {
+				chatgpt_account_id: "fresh-legacy-acc",
+			},
+		});
+		await writeFile(
+			join(codexDir, "accounts.json"),
+			JSON.stringify(
+				{
+					accounts: [
+						{
+							email: "fresh@example.com",
+							accountId: "fresh-legacy-acc",
+							auth: {
+								tokens: {
+									access_token: freshLegacyAccessToken,
+									refresh_token: "fresh-legacy-refresh",
+								},
+							},
+						},
+					],
+				},
+				null,
+				2,
+			),
+			"utf-8",
+		);
+
+		const entries = await loadCodexCliTokenCacheEntriesByEmail({ codexDir });
+		expect(entries).toHaveLength(1);
+		expect(entries[0]).toMatchObject({
+			email: "fresh@example.com",
+			sourceType: "accounts.json",
+			accountId: "fresh-legacy-acc",
+		});
+	});
+
 	it("writes auth.json with backup and preserves unrelated keys", async () => {
 		const codexDir = await createCodexDir("codex-sync-auth-write");
-		const authPath = join(codexDir, "auth.json");
-		const chmodSpy = vi.spyOn(nodeFs, "chmod");
-		try {
-			await writeFile(
-				authPath,
-				JSON.stringify(
-					{
-						auth_mode: "chatgpt",
-						OPENAI_API_KEY: "keep-me",
-						tokens: {
-							access_token: "old-access",
-							refresh_token: "old-refresh",
-						},
-					},
-					null,
-					2,
-				),
-				"utf-8",
-			);
-
-			const accessToken = createJwt({
-				exp: Math.floor(Date.now() / 1000) + 3600,
-				"https://api.openai.com/auth": {
-					chatgpt_account_id: "new-account",
-				},
-			});
-			const result = await writeCodexAuthJsonSession(
+	const authPath = join(codexDir, "auth.json");
+	const chmodSpy = vi.spyOn(nodeFs, "chmod");
+	try {
+		await writeFile(
+			authPath,
+			JSON.stringify(
 				{
-					accessToken,
-					refreshToken: "new-refresh",
-					accountId: "new-account",
+					auth_mode: "chatgpt",
+					OPENAI_API_KEY: "keep-me",
+					tokens: {
+						access_token: "old-access",
+						refresh_token: "old-refresh",
+					},
 				},
-				{ codexDir },
-			);
+				null,
+				2,
+			),
+			"utf-8",
+		);
 
-			expect(result.path).toBe(authPath);
-			expect(result.backupPath).toBeDefined();
-			if (result.backupPath) {
-				const backupStats = await stat(result.backupPath);
-				expect(backupStats.isFile()).toBe(true);
-				expect(chmodSpy).toHaveBeenCalledWith(result.backupPath, 0o600);
-			}
+		const accessToken = createJwt({
+			exp: Math.floor(Date.now() / 1000) + 3600,
+			"https://api.openai.com/auth": {
+				chatgpt_account_id: "new-account",
+			},
+		});
+		const result = await writeCodexAuthJsonSession(
+			{
+				accessToken,
+				refreshToken: "new-refresh",
+				accountId: "new-account",
+			},
+			{ codexDir },
+		);
 
-			const saved = JSON.parse(await readFile(authPath, "utf-8")) as Record<string, unknown>;
-			expect(saved.auth_mode).toBe("chatgpt");
-			expect(saved.OPENAI_API_KEY).toBe("keep-me");
-			const savedTokens = saved.tokens as Record<string, unknown>;
-			expect(savedTokens.access_token).toBe(accessToken);
-			expect(savedTokens.refresh_token).toBe("new-refresh");
-			expect(savedTokens.account_id).toBe("new-account");
-		} finally {
-			chmodSpy.mockRestore();
+		expect(result.path).toBe(authPath);
+		expect(result.backupPath).toBeDefined();
+		if (result.backupPath) {
+			const backupStats = await stat(result.backupPath);
+			expect(backupStats.isFile()).toBe(true);
+			expect(chmodSpy).toHaveBeenCalledWith(result.backupPath, 0o600);
 		}
-	});
+
+		const saved = JSON.parse(await readFile(authPath, "utf-8")) as Record<string, unknown>;
+		expect(saved.auth_mode).toBe("chatgpt");
+		expect(saved.OPENAI_API_KEY).toBe("keep-me");
+		const savedTokens = saved.tokens as Record<string, unknown>;
+		expect(savedTokens.access_token).toBe(accessToken);
+		expect(savedTokens.refresh_token).toBe("new-refresh");
+		expect(savedTokens.account_id).toBe("new-account");
+	} finally {
+		chmodSpy.mockRestore();
+	}
+});
 
 	it("rejects empty accessToken for auth.json writes", async () => {
 		const codexDir = await createCodexDir("codex-sync-auth-empty-access");

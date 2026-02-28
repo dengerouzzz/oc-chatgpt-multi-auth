@@ -15,13 +15,24 @@ const OPENCODE_CONTEXT_MARKERS = [
 	"<instructions>",
 ].map((marker) => marker.toLowerCase());
 
+type InputTextContentItem = { type: "input_text"; text: string };
+
+function isInputTextContentItem(value: unknown): value is InputTextContentItem {
+	if (!value || typeof value !== "object") {
+		return false;
+	}
+
+	const candidate = value as { type?: unknown; text?: unknown };
+	return candidate.type === "input_text" && typeof candidate.text === "string";
+}
+
 export function getContentText(item: InputItem): string {
 	if (typeof item.content === "string") {
 		return item.content;
 	}
 	if (Array.isArray(item.content)) {
 		return item.content
-			.filter((c) => c.type === "input_text" && c.text)
+			.filter(isInputTextContentItem)
 			.map((c) => c.text)
 			.join("\n");
 	}

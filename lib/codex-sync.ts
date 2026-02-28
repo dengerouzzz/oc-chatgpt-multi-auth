@@ -385,6 +385,30 @@ function parseLegacyCacheEntries(path: string, record: Record<string, unknown>):
 	return result;
 }
 
+function getComparableExpiresAt(entry: CodexCliTokenCacheEntryByEmail): number {
+	const expiresAt = entry.expiresAt;
+	return typeof expiresAt === "number" && Number.isFinite(expiresAt) ? expiresAt : 0;
+}
+
+function shouldReplaceEmailCacheEntry(
+	existing: CodexCliTokenCacheEntryByEmail,
+	candidate: CodexCliTokenCacheEntryByEmail,
+): boolean {
+	const existingExpiresAt = getComparableExpiresAt(existing);
+	const candidateExpiresAt = getComparableExpiresAt(candidate);
+	if (candidateExpiresAt !== existingExpiresAt) {
+		return candidateExpiresAt > existingExpiresAt;
+	}
+
+	const candidateHasRefreshToken = !!candidate.refreshToken;
+	const existingHasRefreshToken = !!existing.refreshToken;
+	if (candidateHasRefreshToken !== existingHasRefreshToken) {
+		return candidateHasRefreshToken;
+	}
+
+	return false;
+}
+
 export async function loadCodexCliTokenCacheEntriesByEmail(
 	options?: CodexPathOptions,
 ): Promise<CodexCliTokenCacheEntryByEmail[]> {
@@ -423,7 +447,10 @@ export async function loadCodexCliTokenCacheEntriesByEmail(
 	const byEmail = new Map<string, CodexCliTokenCacheEntryByEmail>();
 	for (const entry of aggregated) {
 		const key = entry.email.toLowerCase();
-		if (!byEmail.has(key)) byEmail.set(key, entry);
+		const existing = byEmail.get(key);
+		if (!existing || shouldReplaceEmailCacheEntry(existing, entry)) {
+			byEmail.set(key, entry);
+		}
 	}
 
 	return Array.from(byEmail.values());

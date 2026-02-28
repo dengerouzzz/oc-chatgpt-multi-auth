@@ -254,6 +254,23 @@ describe("Tool Output Normalization", () => {
 			const item = { type: "message", role: "user", content: 123 } as unknown as InputItem;
 			expect(getContentText(item)).toBe("");
 		});
+
+		it("ignores malformed array entries and returns valid input_text items only", () => {
+			const item = {
+				type: "message",
+				role: "user",
+				content: [
+					null,
+					123,
+					{ foo: "bar" },
+					{ type: "input_text", text: "kept-1" },
+					{ type: "input_text", text: 42 },
+					{ type: "input_text", text: "kept-2" },
+				],
+			} as unknown as InputItem;
+
+			expect(getContentText(item)).toBe("kept-1\nkept-2");
+		});
 	});
 
 	describe("isOpenCodeSystemPrompt with cached prompt", () => {
