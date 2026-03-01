@@ -232,7 +232,10 @@ function isRetryableWriteError(error) {
 function sleepSync(milliseconds) {
   const waitMs = Number.isFinite(milliseconds) && milliseconds > 0 ? milliseconds : 0;
   if (waitMs === 0) return;
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, waitMs);
+  const deadline = Date.now() + waitMs;
+  while (Date.now() < deadline) {
+    // Busy-wait fallback keeps retry logic synchronous and avoids Atomics.wait main-thread restrictions.
+  }
 }
 
 export function writeFileWithRetry(outputPath, content, deps = {}) {

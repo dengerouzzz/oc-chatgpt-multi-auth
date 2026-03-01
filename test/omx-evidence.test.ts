@@ -138,6 +138,39 @@ describe("omx-capture-evidence script", () => {
     }
   });
 
+  it("retries EBUSY with built-in sleep implementation", async () => {
+    const mod = await import("../scripts/omx-capture-evidence.js");
+    const root = await mkdtemp(join(tmpdir(), "omx-evidence-sleep-"));
+    const outputPath = join(root, "retry-output.md");
+    let calls = 0;
+
+    const makeBusyError = () => {
+      const error = new Error("file busy");
+      Object.assign(error, { code: "EBUSY" });
+      return error;
+    };
+
+    try {
+      expect(() => {
+        mod.writeFileWithRetry(outputPath, "content", {
+          writeFileSyncFn: (path: string, content: string, encoding: BufferEncoding) => {
+            calls += 1;
+            if (calls === 1) throw makeBusyError();
+            writeFileSync(path, content, encoding);
+          },
+          maxAttempts: 3,
+          baseDelayMs: 1,
+        });
+      }).not.toThrow();
+
+      expect(calls).toBe(2);
+      const fileContent = await readFile(outputPath, "utf8");
+      expect(fileContent).toBe("content");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("writes evidence markdown when gates pass in ralph mode", async () => {
     const mod = await import("../scripts/omx-capture-evidence.js");
     const root = await mkdtemp(join(tmpdir(), "omx-evidence-"));
