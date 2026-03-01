@@ -251,46 +251,32 @@ describe("Audit logging", () => {
 	describe("readAuditEntries", () => {
 		it("returns parsed entries filtered by sinceMs", () => {
 			const now = Date.now();
-			auditLog(
-				AuditAction.OPERATION_START,
-				"actor",
-				"request.fetch",
-				AuditOutcome.PARTIAL,
-				{
-					event_version: "1.0",
-					operation_id: "old",
-					process_session_id: "p1",
-					operation_class: "request",
-					operation_name: "request.fetch",
-					attempt_no: 1,
-					retry_count: 0,
-					manual_recovery_required: false,
-					beginner_safe_mode: false,
-				},
+			const logPath = getAuditLogPath();
+			writeFileSync(
+				logPath,
+				[
+					JSON.stringify({
+						timestamp: new Date(now - 60_000).toISOString(),
+						correlationId: null,
+						action: AuditAction.OPERATION_START,
+						actor: "actor",
+						resource: "request.fetch",
+						outcome: AuditOutcome.PARTIAL,
+					}),
+					JSON.stringify({
+						timestamp: new Date(now).toISOString(),
+						correlationId: null,
+						action: AuditAction.OPERATION_SUCCESS,
+						actor: "actor",
+						resource: "request.fetch",
+						outcome: AuditOutcome.SUCCESS,
+					}),
+				].join("\n") + "\n",
 			);
 
-			const sinceMs = now - 1000;
-			auditLog(
-				AuditAction.OPERATION_SUCCESS,
-				"actor",
-				"request.fetch",
-				AuditOutcome.SUCCESS,
-				{
-					event_version: "1.0",
-					operation_id: "new",
-					process_session_id: "p1",
-					operation_class: "request",
-					operation_name: "request.fetch",
-					attempt_no: 2,
-					retry_count: 1,
-					manual_recovery_required: false,
-					beginner_safe_mode: false,
-				},
-			);
-
-			const entries = readAuditEntries({ sinceMs });
-			expect(entries.length).toBeGreaterThanOrEqual(1);
-			expect(entries.some((entry) => entry.action === AuditAction.OPERATION_SUCCESS)).toBe(true);
+			const entries = readAuditEntries({ sinceMs: now - 1000 });
+			expect(entries).toHaveLength(1);
+			expect(entries[0]?.action).toBe(AuditAction.OPERATION_SUCCESS);
 		});
 
 		it("respects the limit option", () => {
@@ -299,6 +285,18 @@ describe("Audit logging", () => {
 
 			const entries = readAuditEntries({ limit: 1 });
 			expect(entries).toHaveLength(1);
+			expect(entries[0]?.action).toBe(AuditAction.ACCOUNT_REMOVE);
+		});
+
+		it("returns empty array when audit files cannot be listed", () => {
+			const badPath = join(testLogDir, "blocked.log");
+			writeFileSync(badPath, "not-a-directory", "utf8");
+			configureAudit({
+				enabled: true,
+				logDir: badPath,
+			});
+
+			expect(readAuditEntries()).toEqual([]);
 		});
 	});
 

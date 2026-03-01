@@ -12,6 +12,15 @@ import {
 // Simple in-memory queue to prevent EBUSY locks during highly concurrent writes
 const logQueue: string[] = [];
 let isFlushing = false;
+const MAX_LOG_QUEUE_ITEMS = 5000;
+
+function trimQueueToLimit(context: string): void {
+	if (logQueue.length <= MAX_LOG_QUEUE_ITEMS) return;
+
+	const dropped = logQueue.length - MAX_LOG_QUEUE_ITEMS;
+	logQueue.splice(0, dropped);
+	console.warn(`[AuditLog] Dropped ${dropped} queued entries (${context}) to bound memory usage.`);
+}
 
 function flushLogQueue(logPath: string): void {
 	if (isFlushing || logQueue.length === 0) return;
@@ -26,6 +35,7 @@ function flushLogQueue(logPath: string): void {
 		// If the file is locked by an external process (e.g. antivirus), 
 		// we unshift the items back to the front of the queue to try again later
 		logQueue.unshift(...itemsToFlush);
+		trimQueueToLimit("flush-failure");
 		console.error("[AuditLog] Failed to flush queue, retaining items:", error);
 	} finally {
 		isFlushing = false;
@@ -221,8 +231,9 @@ export function auditLog(
 
 		const logPath = getLogFilePath();
 		const line = JSON.stringify(entry) + "\n";
-		
+
 		logQueue.push(line);
+		trimQueueToLimit("append");
 		flushLogQueue(logPath);
 	} catch {
 		// Audit logging should never break the application
@@ -245,7 +256,12 @@ export function listAuditLogFiles(): string[] {
 export function readAuditEntries(options: ReadAuditEntriesOptions = {}): AuditEntry[] {
 	const { sinceMs, limit } = options;
 	const minTimestamp = typeof sinceMs === "number" ? sinceMs : null;
-	const files = listAuditLogFiles();
+	let files: string[] = [];
+	try {
+		files = listAuditLogFiles();
+	} catch {
+		return [];
+	}
 	const parsedEntries: AuditEntry[] = [];
 
 	for (const filePath of files) {
