@@ -90,6 +90,34 @@ describe("omx-preflight-wsl2 script", () => {
     expect(result.exitCode).toBe(3);
   });
 
+  it("routes to blocked on windows when omx is missing in host and WSL", async () => {
+    const mod = await import("../scripts/omx-preflight-wsl2.js");
+
+    const result = mod.runPreflight(
+      { distro: "" },
+      {
+        platform: "win32",
+        cwd: process.cwd(),
+        existsSync: () => false,
+        readFileSync: () => "",
+        runProcess: (command: string, args: string[]) => {
+          if (command === "omx") return { code: 1, stdout: "", stderr: "missing" };
+          if (command === "wsl" && args[0] === "-l") return { code: 0, stdout: "Ubuntu\n", stderr: "" };
+          if (command === "wsl" && args[0] === "-d") {
+            if (args.join(" ").includes("command -v omx")) return { code: 1, stdout: "", stderr: "missing" };
+            if (args.join(" ").includes("command -v tmux")) return { code: 0, stdout: "", stderr: "" };
+            if (args.join(" ").includes("omx team --help")) return { code: 1, stdout: "", stderr: "missing" };
+          }
+          return { code: 0, stdout: "", stderr: "" };
+        },
+      },
+    );
+
+    expect(result.mode).toBe("blocked");
+    expect(result.exitCode).toBe(4);
+    expect(result.checks.some((entry: { name: string; severity: string }) => entry.name === "omx runtime availability" && entry.severity === "fatal")).toBe(true);
+  });
+
   it("detects placeholder tmux hook pane target as fixable", async () => {
     const mod = await import("../scripts/omx-preflight-wsl2.js");
     const root = await mkdtemp(join(tmpdir(), "omx-preflight-"));

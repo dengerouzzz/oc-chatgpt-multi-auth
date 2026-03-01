@@ -96,15 +96,16 @@ function checkOmxOnHostAdvisory(checks, runner) {
   const omxHelp = runner(getShellCommand("omx"), ["--help"]);
   if (omxHelp.code === 0) {
     addCheck(checks, "pass", "info", "omx host runtime", "omx is available in current host runtime.");
-  } else {
-    addCheck(
-      checks,
-      "warn",
-      "info",
-      "omx host runtime",
-      "omx is not available on host. Team mode can still run in WSL; fallback should run via WSL omx.",
-    );
+    return true;
   }
+  addCheck(
+    checks,
+    "warn",
+    "info",
+    "omx host runtime",
+    "omx is not available on host. Team mode can still run in WSL; fallback should run via WSL omx.",
+  );
+  return false;
 }
 
 function checkHookConfig(checks, cwd, fsDeps) {
@@ -142,23 +143,33 @@ function checkHookConfig(checks, cwd, fsDeps) {
 }
 
 function runWindowsChecks(checks, requestedDistro, runner) {
-  checkOmxOnHostAdvisory(checks, runner);
+  const hostOmxAvailable = checkOmxOnHostAdvisory(checks, runner);
+  let wslOmxAvailable = false;
 
   const wsl = runner("wsl", ["-l", "-q"]);
   if (wsl.code !== 0) {
     addCheck(checks, "fail", "team_hard", "wsl availability", "WSL unavailable. Team mode requires WSL2 or Unix host.");
+    if (!hostOmxAvailable) {
+      addCheck(checks, "fail", "fatal", "omx runtime availability", "omx is unavailable in both host and WSL runtimes.");
+    }
     return { distro: "" };
   }
 
   const allDistros = parseDistroList(wsl.stdout);
   if (allDistros.length === 0) {
     addCheck(checks, "fail", "team_hard", "wsl distros", "No WSL distro found.");
+    if (!hostOmxAvailable) {
+      addCheck(checks, "fail", "fatal", "omx runtime availability", "omx is unavailable in both host and WSL runtimes.");
+    }
     return { distro: "" };
   }
 
   const usableDistros = allDistros.filter((name) => !/^docker-desktop(-data)?$/i.test(name));
   if (usableDistros.length === 0) {
     addCheck(checks, "fail", "team_hard", "usable distro", "Only Docker Desktop distros found. Install Ubuntu or another Linux distro.");
+    if (!hostOmxAvailable) {
+      addCheck(checks, "fail", "fatal", "omx runtime availability", "omx is unavailable in both host and WSL runtimes.");
+    }
     return { distro: "" };
   }
 
@@ -185,6 +196,7 @@ function runWindowsChecks(checks, requestedDistro, runner) {
 
   const omx = runInWsl("command -v omx >/dev/null 2>&1");
   if (omx.code === 0) {
+    wslOmxAvailable = true;
     addCheck(checks, "pass", "info", "omx in WSL", "omx is available in selected distro.");
   } else {
     addCheck(checks, "fail", "team_hard", "omx in WSL", "Install/enable omx inside selected distro.");
@@ -204,6 +216,10 @@ function runWindowsChecks(checks, requestedDistro, runner) {
     "tmux leader session check",
     "Windows preflight cannot reliably assert existing tmux attachment. Rerun preflight from inside WSL tmux session before team launch.",
   );
+
+  if (!hostOmxAvailable && !wslOmxAvailable) {
+    addCheck(checks, "fail", "fatal", "omx runtime availability", "omx is unavailable in both host and WSL runtimes.");
+  }
 
   return { distro: selectedDistro };
 }

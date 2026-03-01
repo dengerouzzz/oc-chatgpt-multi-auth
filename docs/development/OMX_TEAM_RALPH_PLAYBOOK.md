@@ -95,7 +95,7 @@ npm run omx:preflight -- --distro Ubuntu
 | `0` | `team_ready` | Team prerequisites are satisfied | Continue with team mode |
 | `2` | `team_blocked` | Fixable blockers (for example hook config) | Fix blockers, rerun preflight |
 | `3` | `fallback_ralph` | Team-only prerequisites failed | Execute controlled Ralph fallback |
-| `4` | `blocked` | Fatal blocker for both team and fallback (for example missing `omx`) | Stop and fix fatal prerequisite |
+| `4` | `blocked` | Fatal blocker for both team and fallback (for example `omx` missing in both host and WSL runtimes) | Stop and fix fatal prerequisite |
 | `1` | script error | Invocation/runtime failure | Fix command/environment |
 
 ### Phase 5 - Ralph Execution Loop
