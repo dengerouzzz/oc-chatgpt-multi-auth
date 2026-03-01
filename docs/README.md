@@ -17,6 +17,7 @@ Explore the engineering depth behind this plugin:
 - **[Configuration System](development/CONFIG_FLOW.md)** - How config loading and merging works
 - **[Config Fields Guide](development/CONFIG_FIELDS.md)** - Understanding config keys, `id`, and `name`
 - **[Testing Guide](development/TESTING.md)** - Test scenarios, verification procedures, integration testing
+- **[OMX Team + Ralph Playbook](development/OMX_TEAM_RALPH_PLAYBOOK.md)** - WSL2-first atomic workflow, fallback routing, and completion evidence gates
 - **[TUI Parity Checklist](development/TUI_PARITY_CHECKLIST.md)** - Auth dashboard/UI parity requirements for future changes
 
 ## Key Architectural Decisions
