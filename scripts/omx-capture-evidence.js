@@ -159,6 +159,14 @@ export function redactSensitiveText(text) {
       pattern: /\bgh[pousr]_[A-Za-z0-9]{20,}\b/g,
       replace: REDACTION_PLACEHOLDER,
     },
+    {
+      pattern: /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g,
+      replace: REDACTION_PLACEHOLDER,
+    },
+    {
+      pattern: /\b(AWS_SECRET_ACCESS_KEY\b[^\S\r\n]*[:=][^\S\r\n]*)([A-Za-z0-9/+=]{40})\b/gi,
+      replace: (_match, prefix, _secret) => `${prefix}${REDACTION_PLACEHOLDER}`,
+    },
   ];
 
   for (const rule of replacementRules) {
@@ -388,7 +396,9 @@ export async function runEvidence(options, deps = {}) {
   lines.push(`## Overall Result: ${overallPassed ? "PASS" : "FAIL"}`);
   lines.push("");
   lines.push("## Redaction Strategy");
-  lines.push(`- Command output is sanitized before writing evidence; keys matching token/secret/password/api key patterns are replaced with ${REDACTION_PLACEHOLDER}.`);
+  lines.push(
+    `- Command output is sanitized before writing evidence; token/secret/password/api key patterns, GitHub/OpenAI tokens, and AWS key formats are replaced with ${REDACTION_PLACEHOLDER}.`,
+  );
   lines.push("");
   lines.push("## Command Output");
 

@@ -73,7 +73,8 @@ describe("omx-capture-evidence script", () => {
             return {
               command: `${command} ${args.join(" ")}`,
               code: 0,
-              stdout: "token=secret-value Authorization: Bearer bearer-value sk-1234567890123456789012",
+              stdout:
+                "token=secret-value Authorization: Bearer bearer-value sk-1234567890123456789012 AKIA1234567890ABCDEF AWS_SECRET_ACCESS_KEY=abcdABCD0123abcdABCD0123abcdABCD0123abcd",
               stderr: "",
             };
           },
@@ -84,6 +85,8 @@ describe("omx-capture-evidence script", () => {
       expect(markdown).toContain("***REDACTED***");
       expect(markdown).not.toContain("secret-value");
       expect(markdown).not.toContain("bearer-value");
+      expect(markdown).not.toContain("AKIA1234567890ABCDEF");
+      expect(markdown).not.toContain("abcdABCD0123abcdABCD0123abcdABCD0123abcd");
       expect(markdown).toContain("## Redaction Strategy");
     } finally {
       await rm(root, { recursive: true, force: true });
