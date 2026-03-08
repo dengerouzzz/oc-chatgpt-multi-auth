@@ -905,25 +905,30 @@ export class AccountManager {
 		const modelKey = model ? getQuotaKey(family, model) : null;
 
 		for (const account of enabledAccounts) {
+			const accountWaits: number[] = [];
 			const baseResetAt = account.rateLimitResetTimes[baseKey];
 			if (typeof baseResetAt === "number") {
-				waitTimes.push(Math.max(0, baseResetAt - now));
+				accountWaits.push(Math.max(0, baseResetAt - now));
 			}
 
 			if (modelKey) {
 				const modelResetAt = account.rateLimitResetTimes[modelKey];
 				if (typeof modelResetAt === "number") {
-					waitTimes.push(Math.max(0, modelResetAt - now));
+					accountWaits.push(Math.max(0, modelResetAt - now));
 				}
 			}
 
 			if (typeof account.coolingDownUntil === "number") {
-				waitTimes.push(Math.max(0, account.coolingDownUntil - now));
+				accountWaits.push(Math.max(0, account.coolingDownUntil - now));
 			}
 
 			const tokenWaitMs = tokenTracker.getWaitTimeUntilTokenAvailable(account.index, quotaKey);
 			if (Number.isFinite(tokenWaitMs) && tokenWaitMs > 0) {
-				waitTimes.push(tokenWaitMs);
+				accountWaits.push(tokenWaitMs);
+			}
+
+			if (accountWaits.length > 0) {
+				waitTimes.push(Math.max(...accountWaits));
 			}
 		}
 

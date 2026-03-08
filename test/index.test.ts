@@ -2216,12 +2216,17 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 
 	it("rotates to the next account after a 5xx response", async () => {
 		const { AccountManager } = await import("../lib/accounts.js");
+		const fetchHelpers = await import("../lib/request/fetch-helpers.js");
 		const accounts = [
 			{ index: 0, accountId: "acc-1", email: "user1@example.com", refreshToken: "refresh-1" },
 			{ index: 1, accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
 		];
 		const customManager = createRequestAwareManager(accounts);
 		vi.spyOn(AccountManager, "loadFromDisk").mockResolvedValueOnce(customManager as never);
+		vi.mocked(fetchHelpers.createCodexHeaders).mockImplementation(
+			(_init, _accountId, accessToken) =>
+				new Headers({ authorization: `Bearer ${String(accessToken)}` }),
+		);
 		globalThis.fetch = vi
 			.fn()
 			.mockResolvedValueOnce(new Response("upstream bad", { status: 502 }))
@@ -2235,16 +2240,28 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 
 		expect(response.status).toBe(200);
 		expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+		const accessTokens = vi.mocked(globalThis.fetch).mock.calls.map((call) =>
+			new Headers((call[1] as RequestInit | undefined)?.headers).get("authorization"),
+		);
+		expect(accessTokens).toEqual([
+			"Bearer access-acc-1",
+			"Bearer access-acc-2",
+		]);
 	});
 
 	it("rotates to the next account after an empty response retry", async () => {
 		const { AccountManager } = await import("../lib/accounts.js");
+		const fetchHelpers = await import("../lib/request/fetch-helpers.js");
 		const accounts = [
 			{ index: 0, accountId: "acc-1", email: "user1@example.com", refreshToken: "refresh-1" },
 			{ index: 1, accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
 		];
 		const customManager = createRequestAwareManager(accounts);
 		vi.spyOn(AccountManager, "loadFromDisk").mockResolvedValueOnce(customManager as never);
+		vi.mocked(fetchHelpers.createCodexHeaders).mockImplementation(
+			(_init, _accountId, accessToken) =>
+				new Headers({ authorization: `Bearer ${String(accessToken)}` }),
+		);
 		globalThis.fetch = vi
 			.fn()
 			.mockResolvedValueOnce(
@@ -2260,6 +2277,13 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 
 		expect(response.status).toBe(200);
 		expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+		const accessTokens = vi.mocked(globalThis.fetch).mock.calls.map((call) =>
+			new Headers((call[1] as RequestInit | undefined)?.headers).get("authorization"),
+		);
+		expect(accessTokens).toEqual([
+			"Bearer access-acc-1",
+			"Bearer access-acc-2",
+		]);
 	});
 
 	it("returns a retryable wait when every account is locally token-bucket depleted", async () => {

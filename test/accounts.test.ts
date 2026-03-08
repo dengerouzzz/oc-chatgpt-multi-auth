@@ -978,6 +978,37 @@ describe("AccountManager", () => {
       expect(waitTime).toBeGreaterThan(0);
       expect(waitTime).toBeLessThanOrEqual(10000);
     });
+
+    it("uses the earliest account availability when blockers differ per account", () => {
+      const now = Date.now();
+      const stored = {
+        version: 3 as const,
+        activeIndex: 0,
+        activeIndexByFamily: { codex: 0 },
+        accounts: [
+          {
+            refreshToken: "token-1",
+            addedAt: now,
+            lastUsed: now,
+            rateLimitResetTimes: { codex: now + 60000 },
+          },
+          {
+            refreshToken: "token-2",
+            addedAt: now,
+            lastUsed: now,
+            coolingDownUntil: now + 30000,
+            cooldownReason: "manual",
+          },
+        ],
+      };
+
+      const manager = new AccountManager(undefined, stored as never);
+      getTokenTracker().drain(0, "codex", 50);
+
+      const waitTime = manager.getMinWaitTimeForFamily("codex");
+      expect(waitTime).toBeGreaterThan(20000);
+      expect(waitTime).toBeLessThanOrEqual(30000);
+    });
   });
 
   describe("updateFromAuth", () => {
