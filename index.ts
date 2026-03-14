@@ -1158,7 +1158,7 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 		const updatePersistedAccountCountHint = (
 			count: number | null | undefined,
 		): void => {
-			if (!Number.isFinite(count) || count === undefined || count === null) {
+			if (typeof count !== "number" || !Number.isFinite(count)) {
 				return;
 			}
 			persistedAccountCountHint = Math.max(0, Math.trunc(count));
@@ -1993,9 +1993,7 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 					}
 					let accountManager = await accountManagerPromise;
 					cachedAccountManager = accountManager;
-					updatePersistedAccountCountHint(
-						(await loadAccounts())?.accounts.length ?? accountManager.getAccountCount(),
-					);
+					updatePersistedAccountCountHint(accountManager.getAccountCount());
 					const refreshToken = authFallback?.refresh ?? "";
 					const needsPersist =
 						refreshToken &&

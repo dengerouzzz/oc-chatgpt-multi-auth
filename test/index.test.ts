@@ -2201,6 +2201,33 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		expect(storageModule.loadAccounts).not.toHaveBeenCalled();
 	});
 
+	it("does not add storage reads during loader init when footer counts are enabled", async () => {
+		const storageModule = await import("../lib/storage.js");
+		const getAuth = async () => ({
+			type: "oauth" as const,
+			access: "access-token",
+			refresh: "refresh-token",
+			expires: Date.now() + 60_000,
+			multiAccount: true,
+		});
+		const runLoaderAndCountStorageReads = async (): Promise<number> => {
+			const mockClient = createMockClient();
+			const { OpenAIOAuthPlugin } = await import("../index.js");
+			const plugin = await OpenAIOAuthPlugin({ client: mockClient } as never) as unknown as PluginType;
+			vi.mocked(storageModule.loadAccounts).mockClear();
+			await plugin.auth.loader(getAuth, { options: {}, models: {} });
+			return vi.mocked(storageModule.loadAccounts).mock.calls.length;
+		};
+
+		await disablePersistedFooter();
+		const baselineReadCount = await runLoaderAndCountStorageReads();
+
+		await enablePersistedFooter("full-email");
+		const footerReadCount = await runLoaderAndCountStorageReads();
+
+		expect(footerReadCount).toBe(baselineReadCount);
+	});
+
 	it("uses the live account count when the cached footer hint is stale", async () => {
 		await enablePersistedFooter("full-email");
 		mockStorage.accounts = [
