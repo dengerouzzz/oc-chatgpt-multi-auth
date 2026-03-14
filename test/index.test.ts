@@ -2569,10 +2569,15 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		mockClient.tui.showToast.mockClear();
 
 		let resolveFetch: ((response: Response) => void) | undefined;
+		let markFetchStarted: (() => void) | undefined;
+		const fetchStarted = new Promise<void>((resolve) => {
+			markFetchStarted = resolve;
+		});
 		globalThis.fetch = vi.fn().mockImplementation(
 			() =>
 				new Promise<Response>((resolve) => {
 					resolveFetch = resolve;
+					markFetchStarted?.();
 				}),
 		);
 
@@ -2581,7 +2586,7 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 			body: JSON.stringify({ model: "gpt-5.1", prompt_cache_key: "session-stale" }),
 		});
 
-		await new Promise((resolve) => setTimeout(resolve, 0));
+		await fetchStarted;
 
 		await plugin.event({
 			event: { type: "account.select", properties: { index: 1 } },

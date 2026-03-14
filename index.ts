@@ -1194,7 +1194,7 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 		const trimPersistedAccountIndicators = (): void => {
 			while (persistedAccountIndicators.size > MAX_PERSISTED_ACCOUNT_INDICATORS) {
 				const oldestKey = persistedAccountIndicators.keys().next().value;
-				if (!oldestKey) break;
+				if (oldestKey === undefined) break;
 				persistedAccountIndicators.delete(oldestKey);
 			}
 		};
@@ -1222,6 +1222,8 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 				return true;
 			}
 			if (existing) {
+				// Default writes are true LRU touches: reinserting moves active sessions
+				// to the tail so only inactive sessions age out first.
 				persistedAccountIndicators.delete(sessionID);
 			}
 			persistedAccountIndicators.set(sessionID, nextEntry);
