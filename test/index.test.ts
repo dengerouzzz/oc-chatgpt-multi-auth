@@ -2535,7 +2535,7 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		).toBe("user2@example.com [2/2]");
 	});
 
-	it("uses the loader-synced footer setting before the first fetch completes", async () => {
+	it("falls back to the switch toast before the first footer session exists", async () => {
 		await enablePersistedFooter("full-email");
 		mockStorage.accounts = [
 			{ accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },
@@ -2549,7 +2549,7 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 			event: { type: "account.select", properties: { index: 1 } },
 		});
 
-		expect(mockClient.tui.showToast).not.toHaveBeenCalledWith({
+		expect(mockClient.tui.showToast).toHaveBeenCalledWith({
 			body: {
 				message: "Switched to account 2",
 				variant: "info",
@@ -2692,6 +2692,108 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		expect((await readPersistedAccountIndicator(plugin, "session-stale")).variant).toBe(
 			"user2@example.com [2/2]",
 		);
+	});
+
+	it("keeps the higher revision when same-session responses resolve out of order", async () => {
+		await enablePersistedFooter("full-email");
+		mockStorage.accounts = [
+			{ accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },
+			{ accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
+		];
+		const accountsModule = await import("../lib/accounts.js");
+		const fetchHelpers = await import("../lib/request/fetch-helpers.js");
+		const manager = await accountsModule.AccountManager.loadFromDisk() as unknown as {
+			accounts: Array<{
+				index: number;
+				accountId: string;
+				email: string;
+				refreshToken: string;
+			}>;
+			toAuthDetails: (account: {
+				index: number;
+				refreshToken: string;
+			}) => {
+				type: "oauth";
+				access: string;
+				refresh: string;
+				expires: number;
+			};
+		};
+		manager.accounts = [
+			{ index: 0, accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },
+			{ index: 1, accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
+		];
+		vi.spyOn(accountsModule.AccountManager, "loadFromDisk").mockResolvedValue(manager as never);
+		vi.mocked(accountsModule.extractAccountEmail).mockImplementation((accessToken?: string) =>
+			accessToken === "access-token-2" ? "user2@example.com" : "user@example.com",
+		);
+		manager.toAuthDetails = (account) => ({
+			type: "oauth",
+			access: account.index === 1 ? "access-token-2" : "access-token-1",
+			refresh: account.refreshToken,
+			expires: Date.now() + 60_000,
+		});
+		vi.mocked(fetchHelpers.transformRequestForCodex).mockImplementation(
+			async (init, _url, _config, _codexMode, parsedBody) => ({
+				updatedInit: init,
+				body: parsedBody,
+			}),
+		);
+
+		const { plugin, sdk } = await setupPlugin();
+		const requestBody = JSON.stringify({
+			model: "gpt-5.1",
+			prompt_cache_key: "session-same-revision",
+		});
+		const fetchResolvers: Array<(response: Response) => void> = [];
+		let releaseFirstFetch: (() => void) | undefined;
+		const firstFetchStarted = new Promise<void>((resolve) => {
+			releaseFirstFetch = resolve;
+		});
+		let releaseSecondFetch: (() => void) | undefined;
+		const secondFetchStarted = new Promise<void>((resolve) => {
+			releaseSecondFetch = resolve;
+		});
+		let fetchCallIndex = 0;
+
+		globalThis.fetch = vi.fn().mockImplementation(
+			() =>
+				new Promise<Response>((resolve) => {
+					fetchResolvers[fetchCallIndex] = resolve;
+					if (fetchCallIndex === 0) {
+						releaseFirstFetch?.();
+					} else {
+						releaseSecondFetch?.();
+					}
+					fetchCallIndex += 1;
+				}),
+		);
+
+		const requestA = sdk.fetch!("https://api.openai.com/v1/chat", {
+			method: "POST",
+			body: requestBody,
+		});
+		await firstFetchStarted;
+
+		manager.accounts = [
+			{ index: 1, accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
+			{ index: 0, accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },
+		];
+
+		const requestB = sdk.fetch!("https://api.openai.com/v1/chat", {
+			method: "POST",
+			body: requestBody,
+		});
+		await secondFetchStarted;
+
+		fetchResolvers[1]?.(new Response(JSON.stringify({ content: "ok" }), { status: 200 }));
+		await requestB;
+		fetchResolvers[0]?.(new Response(JSON.stringify({ content: "ok" }), { status: 200 }));
+		await requestA;
+
+		expect(
+			(await readPersistedAccountIndicator(plugin, "session-same-revision")).variant,
+		).toBe("user2@example.com [2/2]");
 	});
 
 	it("evicts the oldest persisted indicator after a full refresh when a new session overflows the cap", async () => {

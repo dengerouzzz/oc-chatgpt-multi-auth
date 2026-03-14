@@ -1914,16 +1914,17 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 									accountManagerPromise = Promise.resolve(reloadedManager);
 								}
 
-								if (runtimePersistAccountFooter) {
-									// Prefer the pre-reload managed account so label-only footers keep
-									// the same token-derived id suffix until disk catches up.
-									refreshVisiblePersistedAccountIndicators(
+								if (
+									!runtimePersistAccountFooter ||
+									!refreshVisiblePersistedAccountIndicators(
+										// Prefer the pre-reload managed account so label-only footers keep
+										// the same token-derived id suffix until disk catches up.
 										previousManagedAccount ?? account,
 										index,
 										storage.accounts.length,
 										runtimePersistAccountFooterStyle,
-									);
-								} else {
+									)
+								) {
 									await showToast(`Switched to account ${index + 1}`, "info");
 								}
                         }
