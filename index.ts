@@ -88,6 +88,7 @@ import {
 } from "./lib/logger.js";
 import { checkAndNotify } from "./lib/auto-update-checker.js";
 import { handleContextOverflow } from "./lib/context-overflow.js";
+import { registerCleanup } from "./lib/shutdown.js";
 import {
 	AccountManager,
 	type AccountSelectionExplainability,
@@ -1680,6 +1681,10 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 			accountManagerPromise = null;
 		};
 
+		registerCleanup(async () => {
+			await cachedAccountManager?.flushPendingSave();
+		});
+
         // Event handler for session recovery and account selection
         const eventHandler = async (input: { event: { type: string; properties?: unknown } }) => {
           try {
@@ -2131,7 +2136,7 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 							}
 
 							while (true) {
-										let accountCount = accountManager.getAccountCount();
+										let accountCount = accountManager.getEnabledAccountCount();
 										const attempted = new Set<number>();
 										let restartAccountTraversalWithFallback = false;
 
@@ -2239,7 +2244,7 @@ while (attempted.size < Math.max(1, accountCount)) {
 					);
 					// Restart traversal: clear attempted and refresh accountCount to avoid skipping healthy accounts
 					attempted.clear();
-					accountCount = accountManager.getAccountCount();
+					accountCount = accountManager.getEnabledAccountCount();
 					continue;
 				}
 				
@@ -2597,7 +2602,7 @@ while (attempted.size < Math.max(1, accountCount)) {
 						);
 
 																														if (
-																															accountManager.getAccountCount() > 1 &&
+																															accountManager.getEnabledAccountCount() > 1 &&
 																															accountManager.shouldShowAccountToast(
 																																account.index,
 																																rateLimitToastDebounceMs,
@@ -2680,7 +2685,7 @@ while (attempted.size < Math.max(1, accountCount)) {
 										}
 
 										const waitMs = accountManager.getMinWaitTimeForFamily(modelFamily, model);
-										const count = accountManager.getAccountCount();
+										const count = accountManager.getEnabledAccountCount();
 
 								if (
 									retryAllAccountsRateLimited &&
@@ -3488,6 +3493,12 @@ while (attempted.size < Math.max(1, accountCount)) {
 											const target = workingStorage.accounts[menuResult.toggleAccountIndex];
 											if (target) {
 												const shouldEnable = target.enabled === false;
+												if (shouldEnable && target.disabledReason === "auth-failure") {
+													console.log(
+														"\nThis account was disabled after repeated auth failures. Run 'opencode auth login' to re-enable with fresh credentials.\n",
+													);
+													continue;
+												}
 												target.enabled = shouldEnable ? true : false;
 												target.disabledReason = shouldEnable ? undefined : "user";
 												await saveAccounts(workingStorage);

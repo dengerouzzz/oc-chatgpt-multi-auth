@@ -953,11 +953,6 @@ describe("AccountManager", () => {
       const removedCount = manager.removeAccountsWithSameRefreshToken(account1);
       expect(removedCount).toBe(2);
       expect(manager.getAccountCount()).toBe(0);
-      const failuresByRefreshToken = Reflect.get(
-        manager,
-        "authFailuresByRefreshToken",
-      ) as Map<string, number>;
-      expect(failuresByRefreshToken.has("token-1")).toBe(false);
       expect(manager.incrementAuthFailures(account1)).toBe(1);
     });
 
@@ -967,8 +962,21 @@ describe("AccountManager", () => {
         version: 3 as const,
         activeIndex: 0,
         accounts: [
-          { refreshToken: "token-1", addedAt: now, lastUsed: now },
-          { refreshToken: "token-1", organizationId: "org-1", addedAt: now, lastUsed: now },
+          {
+            refreshToken: "token-1",
+            coolingDownUntil: now + 60_000,
+            cooldownReason: "auth-failure" as const,
+            addedAt: now,
+            lastUsed: now,
+          },
+          {
+            refreshToken: "token-1",
+            organizationId: "org-1",
+            coolingDownUntil: now + 60_000,
+            cooldownReason: "auth-failure" as const,
+            addedAt: now,
+            lastUsed: now,
+          },
         ],
       };
 
@@ -986,12 +994,12 @@ describe("AccountManager", () => {
       expect(
         manager.getAccountsSnapshot().every((account) => account.disabledReason === "auth-failure"),
       ).toBe(true);
-
-      const failuresByRefreshToken = Reflect.get(
-        manager,
-        "authFailuresByRefreshToken",
-      ) as Map<string, number>;
-      expect(failuresByRefreshToken.has("token-1")).toBe(false);
+      expect(
+        manager.getAccountsSnapshot().every((account) => account.coolingDownUntil === undefined),
+      ).toBe(true);
+      expect(
+        manager.getAccountsSnapshot().every((account) => account.cooldownReason === undefined),
+      ).toBe(true);
       expect(manager.incrementAuthFailures(accounts[0])).toBe(1);
     });
 

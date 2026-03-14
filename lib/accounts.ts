@@ -395,6 +395,10 @@ export class AccountManager {
 		return this.accounts.length;
 	}
 
+	getEnabledAccountCount(): number {
+		return this.accounts.filter((account) => account.enabled !== false).length;
+	}
+
 	getActiveIndex(): number {
 		return this.getActiveIndexForFamily("codex");
 	}
@@ -886,6 +890,7 @@ export class AccountManager {
 
 		for (const accountToDisable of this.accounts) {
 			if (accountToDisable.refreshToken !== refreshToken) continue;
+			this.clearAccountCooldown(accountToDisable);
 			if (accountToDisable.enabled === false) continue;
 			accountToDisable.enabled = false;
 			accountToDisable.disabledReason = "auth-failure";
