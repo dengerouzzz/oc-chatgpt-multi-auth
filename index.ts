@@ -2459,7 +2459,7 @@ while (attempted.size < Math.max(1, accountCount)) {
 						`Auth refresh failed for account ${account.index + 1}`,
 					)
 				) {
-					return showTerminalToastResponse(
+					return await showTerminalToastResponse(
 						"Auth refresh retry budget exhausted for this request. Try again or switch accounts.",
 						503,
 					);
@@ -2619,7 +2619,7 @@ while (attempted.size < Math.max(1, accountCount)) {
 									)
 								) {
 									accountManager.refundToken(account, modelFamily, model);
-									return showTerminalToastResponse(
+									return await showTerminalToastResponse(
 										"Network retry budget exhausted for this request. Try again in a moment.",
 										503,
 									);
@@ -2981,7 +2981,7 @@ while (attempted.size < Math.max(1, accountCount)) {
 								runtimeMetrics.failedRequests++;
 								runtimeMetrics.lastError = message;
 								runtimeMetrics.lastErrorCategory = waitMs > 0 ? "rate-limit" : "account-failure";
-								return showTerminalToastResponse(
+								return await showTerminalToastResponse(
 									message,
 									waitMs > 0 ? 429 : 503,
 								);

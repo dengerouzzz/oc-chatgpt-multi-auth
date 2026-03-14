@@ -4119,4 +4119,28 @@ describe("OpenAIOAuthPlugin event handler edge cases", () => {
 			event: { type: "account.select", properties: { index: "invalid" } },
 		});
 	});
+
+	it("ignores account.select with an out-of-bounds index", async () => {
+		const mockClient = createMockClient();
+		const { OpenAIOAuthPlugin } = await import("../index.js");
+		const plugin = await OpenAIOAuthPlugin({ client: mockClient } as never) as unknown as PluginType;
+
+		const getAuth = async () => ({
+			type: "oauth" as const,
+			access: "access-token",
+			refresh: "refresh-token",
+			expires: Date.now() + 60_000,
+			multiAccount: true,
+		});
+
+		await plugin.auth.loader(getAuth, { options: {}, models: {} });
+
+		await expect(
+			plugin.event({
+				event: { type: "account.select", properties: { index: 99 } },
+			}),
+		).resolves.toBeUndefined();
+		expect(mockStorage.activeIndex).toBe(0);
+		expect(mockStorage.activeIndexByFamily).toEqual({});
+	});
 });
