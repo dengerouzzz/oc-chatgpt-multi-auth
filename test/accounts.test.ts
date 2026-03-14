@@ -1854,6 +1854,12 @@ describe("AccountManager", () => {
   });
 
   describe("flushPendingSave", () => {
+    const drainMicrotasks = async (turns = 10): Promise<void> => {
+      for (let turn = 0; turn < turns; turn++) {
+        await Promise.resolve();
+      }
+    };
+
     it("flushes pending debounced save", async () => {
       const { saveAccounts } = await import("../lib/storage.js");
       const mockSaveAccounts = vi.mocked(saveAccounts);
@@ -1994,6 +2000,183 @@ describe("AccountManager", () => {
         await flushPromise;
 
         expect(mockSaveAccounts).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("drains saves queued during flush without overlapping writes", async () => {
+      vi.useFakeTimers();
+      try {
+        const { saveAccounts } = await import("../lib/storage.js");
+        const mockSaveAccounts = vi.mocked(saveAccounts);
+        mockSaveAccounts.mockClear();
+
+        let activeWrites = 0;
+        let maxConcurrentWrites = 0;
+        const settleWrites: Array<() => void> = [];
+        const writePromises: Promise<void>[] = [];
+
+        mockSaveAccounts.mockImplementation(() => {
+          activeWrites++;
+          maxConcurrentWrites = Math.max(maxConcurrentWrites, activeWrites);
+          const writePromise = new Promise<void>((resolve) => {
+            settleWrites.push(() => {
+              activeWrites--;
+              resolve();
+            });
+          });
+          writePromises.push(writePromise);
+          return writePromise;
+        });
+
+        const now = Date.now();
+        const stored = {
+          version: 3 as const,
+          activeIndex: 0,
+          accounts: [
+            { refreshToken: "token-1", addedAt: now, lastUsed: now },
+          ],
+        };
+
+        const manager = new AccountManager(undefined, stored);
+
+        manager.saveToDiskDebounced(50);
+        await vi.advanceTimersByTimeAsync(60);
+        expect(mockSaveAccounts).toHaveBeenCalledTimes(1);
+
+        const armGapSave = writePromises[0]!.then(() => {
+          manager.saveToDiskDebounced(0);
+        });
+
+        manager.saveToDiskDebounced(50);
+        const flushPromise = manager.flushPendingSave();
+
+        settleWrites[0]!();
+        await armGapSave;
+        await drainMicrotasks();
+
+        expect(mockSaveAccounts).toHaveBeenCalledTimes(2);
+
+        manager.saveToDiskDebounced(0);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(mockSaveAccounts).toHaveBeenCalledTimes(2);
+
+        settleWrites[1]!();
+        await drainMicrotasks();
+
+        expect(mockSaveAccounts).toHaveBeenCalledTimes(3);
+
+        settleWrites[2]!();
+        await flushPromise;
+
+        expect(maxConcurrentWrites).toBe(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("persists disabled auth-failure state after flushing over an in-flight save", async () => {
+      vi.useFakeTimers();
+      try {
+        const { saveAccounts } = await import("../lib/storage.js");
+        const mockSaveAccounts = vi.mocked(saveAccounts);
+        mockSaveAccounts.mockClear();
+
+        let activeWrites = 0;
+        let maxConcurrentWrites = 0;
+        const settleWrites: Array<() => void> = [];
+        const savedSnapshots: Array<
+          Array<{
+            refreshToken?: string;
+            enabled?: false;
+            disabledReason?: string;
+            coolingDownUntil?: number;
+            cooldownReason?: string;
+          }>
+        > = [];
+
+        mockSaveAccounts.mockImplementation(async (storage) => {
+          activeWrites++;
+          maxConcurrentWrites = Math.max(maxConcurrentWrites, activeWrites);
+          savedSnapshots.push(
+            storage.accounts.map((account) => ({
+              refreshToken: account.refreshToken,
+              enabled: account.enabled,
+              disabledReason: account.disabledReason,
+              coolingDownUntil: account.coolingDownUntil,
+              cooldownReason: account.cooldownReason,
+            })),
+          );
+          await new Promise<void>((resolve) => {
+            settleWrites.push(() => {
+              activeWrites--;
+              resolve();
+            });
+          });
+        });
+
+        const now = Date.now();
+        const stored = {
+          version: 3 as const,
+          activeIndex: 0,
+          accounts: [
+            {
+              refreshToken: "shared-refresh",
+              addedAt: now,
+              lastUsed: now,
+              coolingDownUntil: now + 10_000,
+              cooldownReason: "auth-failure" as const,
+            },
+            {
+              refreshToken: "shared-refresh",
+              addedAt: now + 1,
+              lastUsed: now + 1,
+              coolingDownUntil: now + 20_000,
+              cooldownReason: "auth-failure" as const,
+            },
+          ],
+        };
+
+        const manager = new AccountManager(undefined, stored);
+
+        manager.saveToDiskDebounced(50);
+        await vi.advanceTimersByTimeAsync(60);
+        expect(mockSaveAccounts).toHaveBeenCalledTimes(1);
+
+        const account = manager.getAccountsSnapshot()[0]!;
+        manager.disableAccountsWithSameRefreshToken(account);
+        manager.saveToDiskDebounced(50);
+
+        const flushPromise = manager.flushPendingSave();
+
+        settleWrites[0]!();
+        await drainMicrotasks();
+
+        expect(mockSaveAccounts).toHaveBeenCalledTimes(2);
+
+        const flushedSharedAccounts = savedSnapshots[1]!.filter(
+          (savedAccount) => savedAccount.refreshToken === "shared-refresh",
+        );
+        expect(flushedSharedAccounts).toEqual([
+          expect.objectContaining({
+            enabled: false,
+            disabledReason: "auth-failure",
+            coolingDownUntil: undefined,
+            cooldownReason: undefined,
+          }),
+          expect.objectContaining({
+            enabled: false,
+            disabledReason: "auth-failure",
+            coolingDownUntil: undefined,
+            cooldownReason: undefined,
+          }),
+        ]);
+
+        settleWrites[1]!();
+        await flushPromise;
+
+        expect(maxConcurrentWrites).toBe(1);
       } finally {
         vi.useRealTimers();
       }

@@ -1009,16 +1009,38 @@ export class AccountManager {
 	}
 
 	async flushPendingSave(): Promise<void> {
-		const hadDebouncedSave = !!this.saveDebounceTimer;
-		if (this.saveDebounceTimer) {
-			clearTimeout(this.saveDebounceTimer);
-			this.saveDebounceTimer = null;
-		}
-		if (this.pendingSave) {
-			await this.pendingSave;
-		}
-		if (hadDebouncedSave) {
-			await this.saveToDisk();
+		while (true) {
+			const hadDebouncedSave = !!this.saveDebounceTimer;
+			if (this.saveDebounceTimer) {
+				clearTimeout(this.saveDebounceTimer);
+				this.saveDebounceTimer = null;
+			}
+			if (this.pendingSave) {
+				await this.pendingSave;
+				// Let debounced callbacks waiting on the completed save re-arm pendingSave.
+				await Promise.resolve();
+				if (this.saveDebounceTimer !== null || this.pendingSave !== null) {
+					continue;
+				}
+			}
+			if (!hadDebouncedSave) {
+				return;
+			}
+			if (this.saveDebounceTimer !== null || this.pendingSave !== null) {
+				continue;
+			}
+			const flushSave = this.saveToDisk().finally(() => {
+				if (this.pendingSave === flushSave) {
+					this.pendingSave = null;
+				}
+			});
+			this.pendingSave = flushSave;
+			await flushSave;
+			// Drain saves that were queued while the flush save was in flight.
+			await Promise.resolve();
+			if (this.saveDebounceTimer === null && this.pendingSave === null) {
+				return;
+			}
 		}
 	}
 }

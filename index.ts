@@ -1681,6 +1681,7 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 			accountManagerPromise = null;
 		};
 
+		// Plugin init can run more than once per process; runCleanup drains this module-level list.
 		registerCleanup(async () => {
 			await cachedAccountManager?.flushPendingSave();
 		});
