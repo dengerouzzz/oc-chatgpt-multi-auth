@@ -1955,7 +1955,7 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 						? (output.message as Record<string, unknown>)
 						: null;
 				const messageRole =
-					typeof message?.role === "string" ? message.role : "user";
+					typeof message?.role === "string" ? message.role : undefined;
 				if (message && messageRole === "user") {
 					applyPersistedAccountIndicator(message, indicator, input.model);
 				}

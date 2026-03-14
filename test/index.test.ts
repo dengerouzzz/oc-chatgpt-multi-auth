@@ -2253,6 +2253,39 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		);
 	});
 
+	it("falls back to the persisted account count hint when the live count transiently drops to zero", async () => {
+		await enablePersistedFooter("full-email");
+		mockStorage.accounts = [
+			{ accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },
+			{ accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
+		];
+		const accountsModule = await import("../lib/accounts.js");
+		const manager = await accountsModule.AccountManager.loadFromDisk() as unknown as {
+			accounts: Array<{
+				index: number;
+				accountId: string;
+				email: string;
+				refreshToken: string;
+			}>;
+			getAccountCount: () => number;
+		};
+		manager.accounts = [
+			{ index: 0, accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },
+			{ index: 1, accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
+		];
+		vi.spyOn(accountsModule.AccountManager, "loadFromDisk").mockResolvedValue(manager as never);
+		const { plugin, sdk } = await setupPlugin();
+		vi.spyOn(manager, "getAccountCount")
+			.mockImplementationOnce(() => 2)
+			.mockImplementationOnce(() => 0);
+
+		await sendPersistedAccountRequest(sdk, "session-count-hint");
+
+		expect((await readPersistedAccountIndicator(plugin, "session-count-hint")).variant).toBe(
+			"user@example.com [1/2]",
+		);
+	});
+
 	it("decorates the last user message with a label-only indicator when configured", async () => {
 		await enablePersistedFooter("label-only");
 		const { plugin, sdk } = await setupPlugin();
@@ -2414,6 +2447,7 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 
 		const output = {
 			message: {
+				role: "user",
 				model: { providerID: "openai", modelID: "gpt-5.4" },
 			},
 			parts: [],
@@ -2430,6 +2464,33 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		expect((output.message as { model?: { variant?: string } }).model?.variant).toBe(
 			expectedFullIndicator,
 		);
+	});
+
+	it("does not set the chat.message indicator when role is missing", async () => {
+		await enablePersistedFooter("full-email");
+		const { plugin, sdk } = await setupPlugin();
+
+		await sendPersistedAccountRequest(sdk, "session-chat-message-missing-role");
+
+		const output = {
+			message: {},
+			parts: [],
+		};
+
+		await expect(
+			plugin["chat.message"](
+				{
+					sessionID: "session-chat-message-missing-role",
+					model: { providerID: "openai", modelID: "gpt-5.4" },
+				},
+				output,
+			),
+		).resolves.toBeUndefined();
+
+		expect((output.message as { variant?: string }).variant).toBeUndefined();
+		expect(
+			(output.message as { model?: { variant?: string } }).model?.variant,
+		).toBeUndefined();
 	});
 
 	it("uses input.model as the fallback chat.message model when model info is absent", async () => {
