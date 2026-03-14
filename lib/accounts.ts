@@ -951,7 +951,9 @@ export class AccountManager {
 		} else if (reason) {
 			account.disabledReason = reason;
 		} else {
-			delete account.disabledReason;
+			if (account.disabledReason !== "auth-failure") {
+				delete account.disabledReason;
+			}
 		}
 		return account;
 	}

@@ -1092,7 +1092,7 @@ describe("AccountManager", () => {
       expect(reenabled?.disabledReason).toBeUndefined();
     });
 
-    it("clears stale disabledReason when disabling without an explicit reason", () => {
+    it("preserves auth-failure disabledReason when disabling without an explicit reason", () => {
       const now = Date.now();
       const stored = {
         version: 3 as const,
@@ -1113,8 +1113,8 @@ describe("AccountManager", () => {
       const disabled = manager.setAccountEnabled(0, false);
       expect(disabled).toMatchObject({
         enabled: false,
+        disabledReason: "auth-failure",
       });
-      expect(disabled?.disabledReason).toBeUndefined();
     });
 
     it("blocks re-enabling auth-failure disabled accounts through setAccountEnabled", () => {
