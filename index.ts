@@ -1705,11 +1705,12 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 			for (const manager of [...trackedAccountManagersForCleanup]) {
 				try {
 					await manager.flushPendingSave();
-					trackedAccountManagersForCleanup.delete(manager);
 				} catch (error) {
 					logWarn("[shutdown] flushPendingSave failed; disabled state may not be persisted", {
 						error: error instanceof Error ? error.message : String(error),
 					});
+				} finally {
+					trackedAccountManagersForCleanup.delete(manager);
 				}
 			}
 		};

@@ -74,7 +74,15 @@ export const CooldownReasonSchema = z.enum(["auth-failure", "network-error"]);
 
 export type CooldownReasonFromSchema = z.infer<typeof CooldownReasonSchema>;
 
-export const DisabledReasonSchema = z.enum(["user", "auth-failure"]);
+const normalizeDisabledReason = (value: unknown): unknown =>
+	value === "user" || value === "auth-failure" ? value : undefined;
+
+// Storage normalization strips unknown disabled reasons later; keep schema parsing
+// lenient so legacy/downgraded files don't warn or fail before that step runs.
+export const DisabledReasonSchema = z.preprocess(
+	normalizeDisabledReason,
+	z.enum(["user", "auth-failure"]).optional(),
+);
 
 export type DisabledReasonFromSchema = z.infer<typeof DisabledReasonSchema>;
 

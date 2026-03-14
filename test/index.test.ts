@@ -3779,6 +3779,62 @@ describe("OpenAIOAuthPlugin persistAccountPool", () => {
 		);
 	});
 
+	it("drops failed tracked managers after shutdown cleanup logs the failure", async () => {
+		const accountsModule = await import("../lib/accounts.js");
+		const loggerModule = await import("../lib/logger.js");
+		const failingManager = await accountsModule.AccountManager.loadFromDisk();
+		const succeedingManager = await accountsModule.AccountManager.loadFromDisk();
+		const failingFlush = vi.fn(async () => {
+			throw new Error("EBUSY");
+		});
+		const succeedingFlush = vi.fn(async () => {});
+		failingManager.flushPendingSave = failingFlush;
+		succeedingManager.flushPendingSave = succeedingFlush;
+		vi.spyOn(accountsModule.AccountManager, "loadFromDisk")
+			.mockResolvedValueOnce(failingManager)
+			.mockResolvedValueOnce(succeedingManager);
+
+		const { OpenAIOAuthPlugin } = await import("../index.js");
+		const firstPlugin = (await OpenAIOAuthPlugin({
+			client: createMockClient(),
+		} as never)) as unknown as PluginType;
+		await firstPlugin.auth.loader(
+			async () => ({
+				type: "oauth",
+				access: "access-token-1",
+				refresh: "refresh-token-1",
+				expires: Date.now() + 60_000,
+			}) as never,
+			{},
+		);
+
+		vi.mocked(loggerModule.logWarn).mockClear();
+		await runCleanup();
+
+		const secondPlugin = (await OpenAIOAuthPlugin({
+			client: createMockClient(),
+		} as never)) as unknown as PluginType;
+		await secondPlugin.auth.loader(
+			async () => ({
+				type: "oauth",
+				access: "access-token-2",
+				refresh: "refresh-token-2",
+				expires: Date.now() + 60_000,
+			}) as never,
+			{},
+		);
+
+		vi.mocked(loggerModule.logWarn).mockClear();
+		await runCleanup();
+
+		expect(failingFlush).toHaveBeenCalledTimes(1);
+		expect(succeedingFlush).toHaveBeenCalledTimes(1);
+		expect(vi.mocked(loggerModule.logWarn)).not.toHaveBeenCalledWith(
+			"[shutdown] flushPendingSave failed; disabled state may not be persisted",
+			expect.anything(),
+		);
+	});
+
 	it("flushes stale invalidated managers alongside the current manager during shutdown cleanup", async () => {
 		const accountsModule = await import("../lib/accounts.js");
 		const cliModule = await import("../lib/cli.js");
