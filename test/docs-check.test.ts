@@ -3,7 +3,7 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 
-const tempRoots = [];
+const tempRoots: string[] = [];
 
 afterEach(async () => {
 	await Promise.all(

@@ -20,6 +20,9 @@ concurrency:
 
 jobs:
   pr-governance:
+    # SECURITY: this job uses pull_request_target so the GitHub token carries
+    # issues: write even for fork PRs. DO NOT add a checkout of the PR head ref
+    # here - doing so would let a fork PR execute arbitrary code with write access.
     name: pr-governance
     runs-on: ubuntu-latest
     steps:
