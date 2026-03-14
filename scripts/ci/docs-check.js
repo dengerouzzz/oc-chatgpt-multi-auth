@@ -11,7 +11,7 @@ const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
 const IGNORED_DIRS = new Set([".git", ".github/workflows", ".omx", "dist", "node_modules", "tmp"]);
 const __filename = fileURLToPath(import.meta.url);
 
-function normalizePathForCompare(targetPath) {
+export function normalizePathForCompare(targetPath) {
 	const resolved = path.resolve(targetPath);
 	return process.platform === "win32" ? resolved.toLowerCase() : resolved;
 }
@@ -193,7 +193,7 @@ function getWorkflowPathFromUrl(target) {
 	}
 }
 
-async function validateLink(filePath, linkTarget) {
+export async function validateLink(filePath, linkTarget) {
 	if (!linkTarget || linkTarget.startsWith("#")) return null;
 	if (/^(mailto:|tel:|data:)/i.test(linkTarget)) return null;
 

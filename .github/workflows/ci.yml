@@ -219,6 +219,7 @@ jobs:
         with:
           node-version-file: .nvmrc
 
+      # docs-check.js is intentionally limited to Node built-ins, so this lane can skip npm ci.
       - name: Verify markdown links and CI badge targets
         run: npm run docs:check
 
