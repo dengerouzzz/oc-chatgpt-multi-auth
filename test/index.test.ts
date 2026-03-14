@@ -2375,9 +2375,12 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 			{ index: 1, accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
 		];
 		vi.spyOn(accountsModule.AccountManager, "loadFromDisk").mockResolvedValue(manager as never);
+		const configModule = await import("../lib/config.js");
 
 		const { plugin, sdk, mockClient } = await setupPlugin();
 		await sendPersistedAccountRequest(sdk, "session-switch");
+		const configReadCountBeforeSwitch =
+			vi.mocked(configModule.loadPluginConfig).mock.calls.length;
 		mockClient.tui.showToast.mockClear();
 
 		expect((await readPersistedAccountIndicator(plugin, "session-switch")).variant).toBe(
@@ -2394,6 +2397,9 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 				variant: "info",
 			},
 		});
+		expect(vi.mocked(configModule.loadPluginConfig)).toHaveBeenCalledTimes(
+			configReadCountBeforeSwitch,
+		);
 		expect((await readPersistedAccountIndicator(plugin, "session-switch")).variant).toBe(
 			"user2@example.com [2/2]",
 		);
@@ -2457,6 +2463,36 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		expect((await readPersistedAccountIndicator(plugin, "session-stale")).variant).toBe(
 			"user2@example.com [2/2]",
 		);
+	});
+
+	it("evicts the oldest persisted indicator after a full refresh when a new session overflows the cap", async () => {
+		await enablePersistedFooter("full-email");
+		mockStorage.accounts = [
+			{ accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },
+			{ accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
+		];
+		const maxPersistedIndicators = 200;
+		const sessionIDs = Array.from(
+			{ length: maxPersistedIndicators },
+			(_, index) => `session-overflow-${index}`,
+		);
+
+		const { plugin, sdk } = await setupPlugin();
+		for (const sessionID of sessionIDs) {
+			await sendPersistedAccountRequest(sdk, sessionID);
+		}
+
+		await plugin.event({
+			event: { type: "account.select", properties: { index: 1 } },
+		});
+
+		await sendPersistedAccountRequest(sdk, "session-overflow-new");
+
+		expect((await readPersistedAccountIndicator(plugin, sessionIDs[0]!)).variant).toBeUndefined();
+		expect((await readPersistedAccountIndicator(plugin, sessionIDs[1]!)).variant).toBe(
+			"user2@example.com [2/2]",
+		);
+		expect((await readPersistedAccountIndicator(plugin, "session-overflow-new")).variant).toBeDefined();
 	});
 
 	it("suppresses the account-use info toast when the footer is enabled", async () => {

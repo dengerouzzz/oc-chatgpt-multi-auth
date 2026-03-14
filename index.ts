@@ -1149,6 +1149,9 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 		const persistedAccountIndicators = new Map<string, PersistedAccountIndicatorEntry>();
 		let persistedAccountIndicatorRevision = 0;
 		let persistedAccountCountHint = 0;
+		let runtimePersistAccountFooter = false;
+		let runtimePersistAccountFooterStyle: PersistAccountFooterStyle =
+			"label-masked-email";
 
 		const nextPersistedAccountIndicatorRevision = (): number => {
 			persistedAccountIndicatorRevision += 1;
@@ -1191,17 +1194,25 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 			accountCount: number,
 			style: PersistAccountFooterStyle,
 			revision: number = nextPersistedAccountIndicatorRevision(),
+			options?: { preserveOrder?: boolean },
 		): boolean => {
 			if (!sessionID) return false;
 			const existing = persistedAccountIndicators.get(sessionID);
 			if (existing && existing.revision > revision) {
 				return false;
 			}
-			persistedAccountIndicators.delete(sessionID);
-			persistedAccountIndicators.set(sessionID, {
+			const nextEntry = {
 				label: formatPersistedAccountIndicator(account, index, accountCount, style),
 				revision,
-			});
+			};
+			if (existing && options?.preserveOrder) {
+				persistedAccountIndicators.set(sessionID, nextEntry);
+				return true;
+			}
+			if (existing) {
+				persistedAccountIndicators.delete(sessionID);
+			}
+			persistedAccountIndicators.set(sessionID, nextEntry);
 			trimPersistedAccountIndicators();
 			return true;
 		};
@@ -1223,6 +1234,7 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 					accountCount,
 					style,
 					revision,
+					{ preserveOrder: true },
 				);
 			}
 			return true;
@@ -1393,8 +1405,17 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 			});
 		};
 
+		const syncRuntimePluginConfig = (
+			pluginConfig: ReturnType<typeof loadPluginConfig>,
+		): UiRuntimeOptions => {
+			runtimePersistAccountFooter = getPersistAccountFooter(pluginConfig);
+			runtimePersistAccountFooterStyle =
+				getPersistAccountFooterStyle(pluginConfig);
+			return applyUiRuntimeFromConfig(pluginConfig);
+		};
+
 		const resolveUiRuntime = (): UiRuntimeOptions => {
-			return applyUiRuntimeFromConfig(loadPluginConfig());
+			return syncRuntimePluginConfig(loadPluginConfig());
 		};
 
 		const getStatusMarker = (
@@ -1861,13 +1882,12 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
                                         accountManagerPromise = Promise.resolve(reloadedManager);
                                 }
 
-								const pluginConfig = loadPluginConfig();
-								if (getPersistAccountFooter(pluginConfig)) {
+								if (runtimePersistAccountFooter) {
 									refreshVisiblePersistedAccountIndicators(
 										account,
 										index,
 										storage.accounts.length,
-										getPersistAccountFooterStyle(pluginConfig),
+										runtimePersistAccountFooterStyle,
 									);
 								} else {
 									await showToast(`Switched to account ${index + 1}`, "info");
@@ -1957,7 +1977,7 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 			async loader(getAuth: () => Promise<Auth>, provider: unknown) {
 				const auth = await getAuth();
 				const pluginConfig = loadPluginConfig();
-				applyUiRuntimeFromConfig(pluginConfig);
+				syncRuntimePluginConfig(pluginConfig);
 				const perProjectAccounts = getPerProjectAccounts(pluginConfig);
 				setStoragePath(perProjectAccounts ? process.cwd() : null);
 				const authFallback = auth.type === "oauth" ? (auth as OAuthAuthDetails) : undefined;
@@ -2949,7 +2969,7 @@ while (attempted.size < Math.max(1, accountCount)) {
 						type: "oauth" as const,
 						authorize: async (inputs?: Record<string, string>) => {
 							const authPluginConfig = loadPluginConfig();
-							applyUiRuntimeFromConfig(authPluginConfig);
+							syncRuntimePluginConfig(authPluginConfig);
 							const authPerProjectAccounts = getPerProjectAccounts(authPluginConfig);
 							setStoragePath(authPerProjectAccounts ? process.cwd() : null);
 
@@ -3924,7 +3944,7 @@ while (attempted.size < Math.max(1, accountCount)) {
                                                         // Initialize storage path for manual OAuth flow
                                                         // Must happen BEFORE persistAccountPool to ensure correct storage location
                                                         const manualPluginConfig = loadPluginConfig();
-							applyUiRuntimeFromConfig(manualPluginConfig);
+							syncRuntimePluginConfig(manualPluginConfig);
                                                         const manualPerProjectAccounts = getPerProjectAccounts(manualPluginConfig);
 							setStoragePath(manualPerProjectAccounts ? process.cwd() : null);
 
