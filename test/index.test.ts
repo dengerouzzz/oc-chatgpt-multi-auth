@@ -3970,6 +3970,8 @@ describe("OpenAIOAuthPlugin persistAccountPool", () => {
 				accountId: "workspace-managed",
 				email: "managed@example.com",
 				refreshToken: "refresh-managed",
+				coolingDownUntil: 30_000,
+				cooldownReason: "network-error",
 				addedAt: 10,
 				lastUsed: 10,
 			},
@@ -3998,17 +4000,23 @@ describe("OpenAIOAuthPlugin persistAccountPool", () => {
 			accountId: "workspace-managed",
 			enabled: false,
 			disabledReason: "user",
+			coolingDownUntil: 30_000,
+			cooldownReason: "network-error",
 		});
 		expect(saveAccountsMock.mock.calls[1]?.[0].accounts[0]).toMatchObject({
 			accountId: "workspace-managed",
 		});
 		expect(saveAccountsMock.mock.calls[1]?.[0].accounts[0]).not.toHaveProperty("enabled");
 		expect(saveAccountsMock.mock.calls[1]?.[0].accounts[0]).not.toHaveProperty("disabledReason");
+		expect(saveAccountsMock.mock.calls[1]?.[0].accounts[0]).not.toHaveProperty("coolingDownUntil");
+		expect(saveAccountsMock.mock.calls[1]?.[0].accounts[0]).not.toHaveProperty("cooldownReason");
 		expect(mockStorage.accounts[0]).toMatchObject({
 			accountId: "workspace-managed",
 		});
 		expect(mockStorage.accounts[0]).not.toHaveProperty("enabled");
 		expect(mockStorage.accounts[0]).not.toHaveProperty("disabledReason");
+		expect(mockStorage.accounts[0]).not.toHaveProperty("coolingDownUntil");
+		expect(mockStorage.accounts[0]).not.toHaveProperty("cooldownReason");
 	});
 
 	it("keeps auth-failure disables blocked in the auth manage menu until a fresh login", async () => {

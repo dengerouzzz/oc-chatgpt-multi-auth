@@ -3539,6 +3539,8 @@ while (attempted.size < Math.max(1, accountCount)) {
 												if (shouldEnable) {
 													delete target.enabled;
 													delete target.disabledReason;
+													delete target.coolingDownUntil;
+													delete target.cooldownReason;
 												} else {
 													target.enabled = false;
 													target.disabledReason = "user";
