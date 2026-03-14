@@ -126,6 +126,7 @@ import {
 	type AccountStorageV3,
 	type FlaggedAccountMetadataV1,
 } from "./lib/storage.js";
+import type { PersistAccountFooterStyle } from "./lib/persist-account-footer.js";
 import {
 	createCodexHeaders,
 	extractRequestUrl,
@@ -216,19 +217,17 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 
 	type PersistedAccountDetails = {
 		accountId?: string;
+		accountIdSource?: AccountIdSource;
 		accountLabel?: string;
 		email?: string;
+		access?: string;
+		accessToken?: string;
 	};
 
 	type SessionModelRef = {
 		providerID: string;
 		modelID: string;
 	};
-
-	type PersistAccountFooterStyle =
-		| "label-masked-email"
-		| "full-email"
-		| "label-only";
 
 	type PersistedAccountIndicatorEntry = {
 		label: string;
@@ -407,7 +406,20 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 		index: number,
 	): string => {
 		const accountLabel = account.accountLabel?.trim();
-		const accountId = account.accountId?.trim();
+		const storedAccountId = account.accountId?.trim();
+		const tokenAccountId = extractAccountId(
+			(typeof account.access === "string" && account.access.trim()) ||
+				(typeof account.accessToken === "string" && account.accessToken.trim()) ||
+				undefined,
+		);
+		const accountId =
+			tokenAccountId &&
+			shouldUpdateAccountIdFromToken(
+				account.accountIdSource,
+				storedAccountId,
+			)
+				? tokenAccountId
+				: storedAccountId;
 		const idSuffix = accountId
 			? accountId.length > 6
 				? accountId.slice(-6)
@@ -1252,6 +1264,8 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 			indicatorLabel: string,
 			fallbackModel?: SessionModelRef,
 		): void => {
+			// `full-email` is an explicit user opt-in for visible variant fields only.
+			// Keep it out of thinking, and mask it before any downstream logging or telemetry.
 			messageInfo.variant = indicatorLabel;
 
 			const existingModel =
@@ -1861,6 +1875,8 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 								if (!account) {
 									return;
 								}
+								const previousManagedAccount =
+									cachedAccountManager?.getAccountsSnapshot()[index];
 
 								const now = Date.now();
 								account.lastUsed = now;
@@ -1876,15 +1892,17 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 
                                 // Reload manager from disk so we don't overwrite newer rotated
                                 // refresh tokens with stale in-memory state.
-                                if (cachedAccountManager) {
-                                        const reloadedManager = await AccountManager.loadFromDisk();
-                                        cachedAccountManager = reloadedManager;
-                                        accountManagerPromise = Promise.resolve(reloadedManager);
-                                }
+								if (cachedAccountManager) {
+									const reloadedManager = await AccountManager.loadFromDisk();
+									cachedAccountManager = reloadedManager;
+									accountManagerPromise = Promise.resolve(reloadedManager);
+								}
 
 								if (runtimePersistAccountFooter) {
+									// Prefer the pre-reload managed account so label-only footers keep
+									// the same token-derived id suffix until disk catches up.
 									refreshVisiblePersistedAccountIndicators(
-										account,
+										previousManagedAccount ?? account,
 										index,
 										storage.accounts.length,
 										runtimePersistAccountFooterStyle,
@@ -2173,9 +2191,9 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 						init?: RequestInit,
 					): Promise<Response> {
 						try {
-							// Keep request-time toast behavior and later account.switch refreshes
-							// aligned with the latest config/env snapshot.
-							syncRuntimePluginConfig(loadPluginConfig());
+							// Re-apply env overrides against the loader's config snapshot without
+							// another disk read on the request hot path.
+							syncRuntimePluginConfig(pluginConfig);
 							if (cachedAccountManager && cachedAccountManager !== accountManager) {
 								accountManager = cachedAccountManager;
 							}

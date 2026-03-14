@@ -118,34 +118,30 @@ vi.mock("../lib/request/request-transformer.js", () => ({
 	applyFastSessionDefaults: <T>(config: T) => config,
 }));
 
-vi.mock("../lib/logger.js", () => ({
-	initLogger: vi.fn(),
-	logRequest: vi.fn(),
-	logDebug: vi.fn(),
-	logInfo: vi.fn(),
-	logWarn: vi.fn(),
-	logError: vi.fn(),
-	maskEmail: (email: string) => {
-		const atIndex = email.indexOf("@");
-		if (atIndex < 0) return "***@***";
-		const local = email.slice(0, atIndex);
-		const domain = email.slice(atIndex + 1);
-		const parts = domain.split(".");
-		const tld = parts.pop() || "";
-		const prefix = local.slice(0, Math.min(2, local.length));
-		return `${prefix}***@***.${tld}`;
-	},
-	setCorrelationId: vi.fn(() => "test-correlation-id"),
-	clearCorrelationId: vi.fn(),
-	createLogger: vi.fn(() => ({
-		debug: vi.fn(),
-		info: vi.fn(),
-		warn: vi.fn(),
-		error: vi.fn(),
-		time: vi.fn(() => vi.fn(() => 0)),
-		timeEnd: vi.fn(),
-	})),
-}));
+vi.mock("../lib/logger.js", async () => {
+	const actual = await vi.importActual<typeof import("../lib/logger.js")>(
+		"../lib/logger.js",
+	);
+	return {
+		...actual,
+		initLogger: vi.fn(),
+		logRequest: vi.fn(),
+		logDebug: vi.fn(),
+		logInfo: vi.fn(),
+		logWarn: vi.fn(),
+		logError: vi.fn(),
+		setCorrelationId: vi.fn(() => "test-correlation-id"),
+		clearCorrelationId: vi.fn(),
+		createLogger: vi.fn(() => ({
+			debug: vi.fn(),
+			info: vi.fn(),
+			warn: vi.fn(),
+			error: vi.fn(),
+			time: vi.fn(() => vi.fn(() => 0)),
+			timeEnd: vi.fn(),
+		})),
+	};
+});
 
 vi.mock("../lib/auto-update-checker.js", () => ({
 	checkAndNotify: vi.fn(async () => {}),
@@ -2273,6 +2269,46 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		);
 	});
 
+	it("keeps the label-only indicator stable across manual account switches", async () => {
+		await enablePersistedFooter("label-only");
+		mockStorage.accounts = [
+			{ accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },
+			{ accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
+		];
+		const accountsModule = await import("../lib/accounts.js");
+		const previousManager = await accountsModule.AccountManager.loadFromDisk() as unknown as {
+			accounts: Array<{
+				index: number;
+				accountId: string;
+				email: string;
+				refreshToken: string;
+			}>;
+		};
+		const reloadedManager = await accountsModule.AccountManager.loadFromDisk() as typeof previousManager;
+		previousManager.accounts = [
+			{ index: 0, accountId: "account-1", email: "user@example.com", refreshToken: "refresh-token" },
+			{ index: 1, accountId: "account-2", email: "user2@example.com", refreshToken: "refresh-2" },
+		];
+		reloadedManager.accounts = [
+			{ index: 0, accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },
+			{ index: 1, accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
+		];
+		vi.spyOn(accountsModule.AccountManager, "loadFromDisk")
+			.mockResolvedValueOnce(previousManager as never)
+			.mockResolvedValueOnce(reloadedManager as never);
+
+		const { plugin, sdk } = await setupPlugin();
+		await sendPersistedAccountRequest(sdk, "session-label-switch");
+
+		await plugin.event({
+			event: { type: "account.select", properties: { index: 1 } },
+		});
+
+		expect((await readPersistedAccountIndicator(plugin, "session-label-switch")).variant).toBe(
+			"Account 2 [id:ount-2] [2/2]",
+		);
+	});
+
 	it("skips persisted indicators when the request has no session key", async () => {
 		await enablePersistedFooter("label-masked-email");
 		const { plugin, sdk } = await setupPlugin();
@@ -2405,7 +2441,7 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		);
 	});
 
-	it("syncs account-switch footer behavior after a fetch reload enables it", async () => {
+	it("syncs account-switch footer behavior after a fetch refresh enables it", async () => {
 		await disablePersistedFooter();
 		mockStorage.accounts = [
 			{ accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },

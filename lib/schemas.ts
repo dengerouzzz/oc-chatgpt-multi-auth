@@ -4,6 +4,7 @@
  * Types are inferred from schemas using z.infer.
  */
 import { z } from "zod";
+import { PERSIST_ACCOUNT_FOOTER_STYLES } from "./persist-account-footer.js";
 import { MODEL_FAMILIES, type ModelFamily } from "./prompts/codex.js";
 
 // ============================================================================
@@ -43,9 +44,7 @@ export const PluginConfigSchema = z.object({
 	rateLimitToastDebounceMs: z.number().min(0).optional(),
 	toastDurationMs: z.number().min(1000).optional(),
 	persistAccountFooter: z.boolean().optional(),
-	persistAccountFooterStyle: z
-		.enum(["label-masked-email", "full-email", "label-only"])
-		.optional(),
+	persistAccountFooterStyle: z.enum(PERSIST_ACCOUNT_FOOTER_STYLES).optional(),
 	perProjectAccounts: z.boolean().optional(),
 	sessionRecovery: z.boolean().optional(),
 	autoResume: z.boolean().optional(),

@@ -3,6 +3,10 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import type { PluginConfig } from "./types.js";
 import {
+	PERSIST_ACCOUNT_FOOTER_STYLES,
+	type PersistAccountFooterStyle,
+} from "./persist-account-footer.js";
+import {
 	normalizeRetryBudgetValue,
 	type RetryBudgetOverrides,
 	type RetryProfile,
@@ -16,12 +20,6 @@ const TUI_GLYPH_MODES = new Set(["ascii", "unicode", "auto"]);
 const REQUEST_TRANSFORM_MODES = new Set(["native", "legacy"]);
 const UNSUPPORTED_CODEX_POLICIES = new Set(["strict", "fallback"]);
 const RETRY_PROFILES = new Set(["conservative", "balanced", "aggressive"]);
-const PERSIST_ACCOUNT_FOOTER_STYLES = new Set([
-	"label-masked-email",
-	"full-email",
-	"label-only",
-]);
-
 export type UnsupportedCodexPolicy = "strict" | "fallback";
 
 /**
@@ -450,12 +448,12 @@ export function getPersistAccountFooter(pluginConfig: PluginConfig): boolean {
 
 export function getPersistAccountFooterStyle(
 	pluginConfig: PluginConfig,
-): "label-masked-email" | "full-email" | "label-only" {
+): PersistAccountFooterStyle {
 	return resolveStringSetting(
 		"CODEX_AUTH_PERSIST_ACCOUNT_FOOTER_STYLE",
 		pluginConfig.persistAccountFooterStyle,
 		"label-masked-email",
-		PERSIST_ACCOUNT_FOOTER_STYLES,
+		new Set(PERSIST_ACCOUNT_FOOTER_STYLES),
 	);
 }
 
