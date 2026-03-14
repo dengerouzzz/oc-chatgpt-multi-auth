@@ -2578,12 +2578,70 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		expect((await readPersistedAccountIndicator(plugin, "session-overflow-new")).variant).toBeDefined();
 	});
 
+	it("shows the account-use info toast when the footer is disabled", async () => {
+		await disablePersistedFooter();
+		mockStorage.accounts = [
+			{ accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },
+			{ accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
+		];
+		const accountsModule = await import("../lib/accounts.js");
+		const manager = await accountsModule.AccountManager.loadFromDisk() as unknown as {
+			accounts: Array<{
+				index: number;
+				accountId: string;
+				email: string;
+				refreshToken: string;
+			}>;
+		};
+		manager.accounts = [
+			{ index: 0, accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },
+			{ index: 1, accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
+		];
+		vi.spyOn(accountsModule.AccountManager, "loadFromDisk").mockResolvedValue(manager as never);
+		vi.spyOn(accountsModule, "formatAccountLabel").mockImplementation(
+			(account: { email?: string }, index: number) =>
+				account.email ?? `Account ${index + 1}`,
+		);
+		vi.spyOn(accountsModule.AccountManager.prototype, "shouldShowAccountToast").mockReturnValue(true);
+
+		const { sdk, mockClient } = await setupPlugin();
+		mockClient.tui.showToast.mockClear();
+
+		await sendPersistedAccountRequest(sdk, "session-using-shown");
+
+		expect(mockClient.tui.showToast).toHaveBeenCalledWith({
+			body: {
+				message: "Using user@example.com (1/2)",
+				variant: "info",
+			},
+		});
+	});
+
 	it("suppresses the account-use info toast when the footer is enabled", async () => {
 		await enablePersistedFooter("full-email");
 		mockStorage.accounts = [
 			{ accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },
 			{ accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
 		];
+		const accountsModule = await import("../lib/accounts.js");
+		const manager = await accountsModule.AccountManager.loadFromDisk() as unknown as {
+			accounts: Array<{
+				index: number;
+				accountId: string;
+				email: string;
+				refreshToken: string;
+			}>;
+		};
+		manager.accounts = [
+			{ index: 0, accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },
+			{ index: 1, accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
+		];
+		vi.spyOn(accountsModule.AccountManager, "loadFromDisk").mockResolvedValue(manager as never);
+		vi.spyOn(accountsModule, "formatAccountLabel").mockImplementation(
+			(account: { email?: string }, index: number) =>
+				account.email ?? `Account ${index + 1}`,
+		);
+		vi.spyOn(accountsModule.AccountManager.prototype, "shouldShowAccountToast").mockReturnValue(true);
 
 		const { sdk, mockClient } = await setupPlugin();
 		mockClient.tui.showToast.mockClear();

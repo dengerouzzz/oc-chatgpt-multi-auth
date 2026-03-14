@@ -1265,7 +1265,8 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 			fallbackModel?: SessionModelRef,
 		): void => {
 			// `full-email` is an explicit user opt-in for visible variant fields only.
-			// Keep it out of thinking, and mask it before any downstream logging or telemetry.
+			// Keep it out of thinking, and route any logging through `lib/logger.ts`,
+			// which masks emails in both message strings and structured payloads.
 			messageInfo.variant = indicatorLabel;
 
 			const existingModel =
@@ -1421,15 +1422,25 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 
 		const syncRuntimePluginConfig = (
 			pluginConfig: ReturnType<typeof loadPluginConfig>,
-		): UiRuntimeOptions => {
-			runtimePersistAccountFooter = getPersistAccountFooter(pluginConfig);
-			runtimePersistAccountFooterStyle =
+		): {
+			persistAccountFooter: boolean;
+			persistAccountFooterStyle: PersistAccountFooterStyle;
+			ui: UiRuntimeOptions;
+		} => {
+			const persistAccountFooter = getPersistAccountFooter(pluginConfig);
+			const persistAccountFooterStyle =
 				getPersistAccountFooterStyle(pluginConfig);
-			return applyUiRuntimeFromConfig(pluginConfig);
+			runtimePersistAccountFooter = persistAccountFooter;
+			runtimePersistAccountFooterStyle = persistAccountFooterStyle;
+			return {
+				persistAccountFooter,
+				persistAccountFooterStyle,
+				ui: applyUiRuntimeFromConfig(pluginConfig),
+			};
 		};
 
 		const resolveUiRuntime = (): UiRuntimeOptions => {
-			return syncRuntimePluginConfig(loadPluginConfig());
+			return syncRuntimePluginConfig(loadPluginConfig()).ui;
 		};
 
 		const getStatusMarker = (
@@ -2192,8 +2203,12 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 					): Promise<Response> {
 						try {
 							// Re-apply env overrides against the loader's config snapshot without
-							// another disk read on the request hot path.
-							syncRuntimePluginConfig(pluginConfig);
+							// another disk read on the request hot path. Use request-local copies
+							// below so concurrent fetches cannot observe another request's footer state.
+							const {
+								persistAccountFooter,
+								persistAccountFooterStyle,
+							} = syncRuntimePluginConfig(pluginConfig);
 							if (cachedAccountManager && cachedAccountManager !== accountManager) {
 								accountManager = cachedAccountManager;
 							}
@@ -2524,7 +2539,7 @@ while (attempted.size < Math.max(1, accountCount)) {
 												extractAccountEmail(accountAuth.access) ?? account.email;
 
 								if (
-									!runtimePersistAccountFooter &&
+									!persistAccountFooter &&
 									accountCount > 1 &&
 									accountManager.shouldShowAccountToast(
 										account.index,
@@ -2904,7 +2919,7 @@ while (attempted.size < Math.max(1, accountCount)) {
 					}
 
 					accountManager.recordSuccess(account, modelFamily, model);
-					if (runtimePersistAccountFooter) {
+					if (persistAccountFooter) {
 						const liveAccountCount = accountManager.getAccountCount();
 						const persistedAccountCount =
 							liveAccountCount > 0
@@ -2917,7 +2932,7 @@ while (attempted.size < Math.max(1, accountCount)) {
 							account,
 							account.index,
 							persistedAccountCount,
-							runtimePersistAccountFooterStyle,
+							persistAccountFooterStyle,
 							indicatorRevision,
 						);
 					}
