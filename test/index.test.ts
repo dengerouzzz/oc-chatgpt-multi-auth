@@ -2367,17 +2367,16 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		expect((await readPersistedAccountIndicator(plugin, "session-chat-message")).thinking).toBeUndefined();
 	});
 
-	it("prefers the explicit request session key over CODEX_THREAD_ID", async () => {
+	it("uses CODEX_THREAD_ID as the footer session key when it differs from prompt_cache_key", async () => {
 		await enablePersistedFooter("full-email");
 		process.env.CODEX_THREAD_ID = "env-session";
 		const { plugin, sdk } = await setupPlugin();
 
 		await sendPersistedAccountRequest(sdk, "session-explicit");
 
-		expect((await readPersistedAccountIndicator(plugin, "session-explicit")).variant).toBe(
+		expect((await readPersistedAccountIndicator(plugin, "env-session")).variant).toBe(
 			expectedFullIndicator,
 		);
-		expect((await readPersistedAccountIndicator(plugin, "env-session")).variant).toBeUndefined();
 	});
 
 	it("falls back to CODEX_THREAD_ID in the transform hook when the message session is missing", async () => {
@@ -2425,6 +2424,32 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 			},
 			output,
 		);
+
+		expect((output.message as { variant?: string }).variant).toBe(expectedFullIndicator);
+		expect((output.message as { model?: { variant?: string } }).model?.variant).toBe(
+			expectedFullIndicator,
+		);
+	});
+
+	it("sets the chat.message indicator when model info is absent", async () => {
+		await enablePersistedFooter("full-email");
+		const { plugin, sdk } = await setupPlugin();
+
+		await sendPersistedAccountRequest(sdk, "session-chat-message-no-model");
+
+		const output = {
+			message: {},
+			parts: [],
+		};
+
+		await expect(
+			plugin["chat.message"](
+				{
+					sessionID: "session-chat-message-no-model",
+				},
+				output,
+			),
+		).resolves.toBeUndefined();
 
 		expect((output.message as { variant?: string }).variant).toBe(expectedFullIndicator);
 		expect((output.message as { model?: { variant?: string } }).model?.variant).toBe(

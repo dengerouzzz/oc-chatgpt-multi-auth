@@ -2318,8 +2318,13 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 										let model = transformedBody?.model;
 										let modelFamily = model ? getModelFamily(model) : "gpt-5.4";
 										let quotaKey = model ? `${modelFamily}:${model}` : modelFamily;
-						const threadIdCandidate =
-							resolvePersistedAccountSessionID(promptCacheKey);
+						// When the host provides a runtime thread id, prefer it over
+						// prompt_cache_key so the fetch path stores indicators under the
+						// same session key that the chat hooks resolve later.
+						const threadIdCandidate = resolvePersistedAccountSessionID(
+							process.env.CODEX_THREAD_ID,
+							promptCacheKey,
+						);
 						const indicatorRevision = persistAccountFooter
 							? nextPersistedAccountIndicatorRevision()
 							: 0;
