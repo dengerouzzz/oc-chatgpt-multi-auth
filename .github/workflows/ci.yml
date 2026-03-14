@@ -22,6 +22,7 @@ jobs:
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       code_changed: ${{ steps.detect.outputs.code_changed }}
       docs_changed: ${{ steps.detect.outputs.docs_changed }}

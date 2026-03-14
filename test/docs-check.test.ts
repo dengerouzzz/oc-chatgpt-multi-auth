@@ -64,6 +64,12 @@ describe("docs-check script", () => {
 				"https://github.com/ndycode/oc-chatgpt-multi-auth/actions/workflows/does-not-exist.yml/badge.svg",
 			),
 		).resolves.toBe("Missing workflow referenced by GitHub Actions badge/link: does-not-exist.yml");
+		await expect(
+			validateLink(
+				docsFile,
+				"https://github.com/octocat/hello-world/actions/workflows/ci.yml/badge.svg",
+			),
+		).resolves.toBeNull();
 	});
 
 	it("resolves relative local targets from the markdown file directory", async () => {

@@ -24,6 +24,7 @@ jobs:
   detect-dependency-change:
     name: detect-dependency-change
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       dependency_changed: ${{ steps.detect.outputs.dependency_changed }}
       code_changed: ${{ steps.detect.outputs.code_changed }}

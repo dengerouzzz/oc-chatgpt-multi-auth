@@ -10,6 +10,7 @@ const DEFAULT_DIRS = [".github", "config", "docs", "test"];
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
 const IGNORED_DIRS = new Set([".git", ".github/workflows", ".omx", "dist", "node_modules", "tmp"]);
 const __filename = fileURLToPath(import.meta.url);
+const REPOSITORY = process.env.GITHUB_REPOSITORY ?? "ndycode/oc-chatgpt-multi-auth";
 
 export function normalizePathForCompare(targetPath) {
 	const resolved = path.resolve(targetPath);
@@ -216,8 +217,14 @@ function getWorkflowPathFromUrl(target) {
 	try {
 		const url = new URL(target);
 		if (!["github.com", "www.github.com"].includes(url.hostname)) return null;
-		const match = url.pathname.match(/\/actions\/workflows\/([^/]+)(?:\/badge\.svg)?$/);
-		return match?.[1] ?? null;
+		const match = url.pathname.match(/^\/([^/]+)\/([^/]+)\/actions\/workflows\/([^/]+)(?:\/badge\.svg)?$/);
+		if (!match) return null;
+
+		const [, ownerFromUrl, repoFromUrl, workflowFile] = match;
+		const [owner, repo] = REPOSITORY.split("/");
+		if (ownerFromUrl !== owner || repoFromUrl !== repo) return null;
+
+		return workflowFile;
 	} catch {
 		return null;
 	}
