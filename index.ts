@@ -573,6 +573,8 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 					if (reasons.includes("auth-failure")) {
 						return "auth-failure" satisfies AccountDisabledReason;
 					}
+					// Unknown disabled reasons are treated as legacy/manual disables.
+					// Explicit login revival is reserved for accounts we know were disabled by auth failure.
 					return undefined;
 				})();
 				const targetCoolingDownUntil =
@@ -1683,7 +1685,13 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 
 		// Plugin init can run more than once per process; runCleanup drains this module-level list.
 		registerCleanup(async () => {
-			await cachedAccountManager?.flushPendingSave();
+			try {
+				await cachedAccountManager?.flushPendingSave();
+			} catch (error) {
+				logWarn("[shutdown] flushPendingSave failed; disabled state may not be persisted", {
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
 		});
 
         // Event handler for session recovery and account selection

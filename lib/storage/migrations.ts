@@ -27,6 +27,7 @@ export interface AccountMetadataV1 {
 	/** Optional access token expiry timestamp (ms since epoch). */
 	expiresAt?: number;
 	enabled?: boolean;
+	/** Never persisted by V1 storage; disabled V1 accounts migrate as user-disabled. */
 	disabledReason?: AccountDisabledReason;
 	addedAt: number;
 	lastUsed: number;

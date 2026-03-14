@@ -1009,7 +1009,17 @@ export class AccountManager {
 	}
 
 	async flushPendingSave(): Promise<void> {
+		const MAX_FLUSH_ITERATIONS = 20;
+		let flushIterations = 0;
+
 		while (true) {
+			flushIterations += 1;
+			if (flushIterations > MAX_FLUSH_ITERATIONS) {
+				log.warn("flushPendingSave exceeded max iterations; possible save loop", {
+					iterations: flushIterations - 1,
+				});
+				return;
+			}
 			const hadDebouncedSave = !!this.saveDebounceTimer;
 			if (this.saveDebounceTimer) {
 				clearTimeout(this.saveDebounceTimer);

@@ -13,12 +13,31 @@ import {
 import { getHealthTracker, getTokenTracker, resetTrackers } from "../lib/rotation.js";
 import type { OAuthAuthDetails } from "../lib/types.js";
 
+const { accountLoggerWarn } = vi.hoisted(() => ({
+  accountLoggerWarn: vi.fn(),
+}));
+
 vi.mock("../lib/storage.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/storage.js")>();
   return {
     ...actual,
     saveAccounts: vi.fn().mockResolvedValue(undefined),
   };
+});
+
+vi.mock("../lib/logger.js", () => ({
+  createLogger: vi.fn(() => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: accountLoggerWarn,
+    error: vi.fn(),
+    time: vi.fn(() => vi.fn(() => 0)),
+    timeEnd: vi.fn(),
+  })),
+}));
+
+beforeEach(() => {
+  accountLoggerWarn.mockClear();
 });
 
 describe("parseRateLimitReason", () => {
@@ -2177,6 +2196,47 @@ describe("AccountManager", () => {
         await flushPromise;
 
         expect(maxConcurrentWrites).toBe(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("warns and exits if flushPendingSave keeps discovering new saves", async () => {
+      vi.useFakeTimers();
+      try {
+        const { saveAccounts } = await import("../lib/storage.js");
+        const mockSaveAccounts = vi.mocked(saveAccounts);
+        mockSaveAccounts.mockClear();
+        mockSaveAccounts.mockResolvedValue();
+
+        const now = Date.now();
+        const stored = {
+          version: 3 as const,
+          activeIndex: 0,
+          accounts: [
+            { refreshToken: "token-1", addedAt: now, lastUsed: now },
+          ],
+        };
+
+        const manager = new AccountManager(undefined, stored);
+        const originalSaveToDisk = manager.saveToDisk.bind(manager);
+        let rearmedSaves = 0;
+
+        vi.spyOn(manager, "saveToDisk").mockImplementation(async () => {
+          if (rearmedSaves < 25) {
+            rearmedSaves++;
+            manager.saveToDiskDebounced(0);
+          }
+          await originalSaveToDisk();
+        });
+
+        manager.saveToDiskDebounced(0);
+        await manager.flushPendingSave();
+
+        expect(accountLoggerWarn).toHaveBeenCalledWith(
+          "flushPendingSave exceeded max iterations; possible save loop",
+          expect.objectContaining({ iterations: 20 }),
+        );
       } finally {
         vi.useRealTimers();
       }

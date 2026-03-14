@@ -3695,6 +3695,42 @@ describe("OpenAIOAuthPlugin persistAccountPool", () => {
 		expect(flushPendingSave).toHaveBeenCalledTimes(1);
 	});
 
+	it("logs when shutdown cleanup flush fails", async () => {
+		const accountsModule = await import("../lib/accounts.js");
+		const loggerModule = await import("../lib/logger.js");
+		const flushPendingSave = vi.fn(async () => {
+			throw new Error("EBUSY");
+		});
+		const manager = await accountsModule.AccountManager.loadFromDisk();
+		manager.flushPendingSave = flushPendingSave;
+		vi.spyOn(accountsModule.AccountManager, "loadFromDisk").mockResolvedValue(manager);
+
+		const mockClient = createMockClient();
+		const { OpenAIOAuthPlugin } = await import("../index.js");
+		const plugin = (await OpenAIOAuthPlugin({
+			client: mockClient,
+		} as never)) as unknown as PluginType;
+
+		await plugin.auth.loader(
+			async () => ({
+				type: "oauth",
+				access: "access-token",
+				refresh: "refresh-token",
+				expires: Date.now() + 60_000,
+			}) as never,
+			{},
+		);
+
+		vi.mocked(loggerModule.logWarn).mockClear();
+		await runCleanup();
+
+		expect(flushPendingSave).toHaveBeenCalledTimes(1);
+		expect(vi.mocked(loggerModule.logWarn)).toHaveBeenCalledWith(
+			"[shutdown] flushPendingSave failed; disabled state may not be persisted",
+			expect.objectContaining({ error: "EBUSY" }),
+		);
+	});
+
 	it("writes user disable metadata from the auth manage menu and clears it on manual re-enable", async () => {
 		const cliModule = await import("../lib/cli.js");
 		const storageModule = await import("../lib/storage.js");
