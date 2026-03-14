@@ -202,6 +202,7 @@ import {
  * ```
  */
 let accountManagerCleanupHook: (() => Promise<void>) | null = null;
+const staleAccountManagersForCleanup = new Set<AccountManager>();
 
 // eslint-disable-next-line @typescript-eslint/require-await
 export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
@@ -1681,6 +1682,9 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 		};
 
 		const invalidateAccountManagerCache = (): void => {
+			if (cachedAccountManager) {
+				staleAccountManagersForCleanup.add(cachedAccountManager);
+			}
 			cachedAccountManager = null;
 			accountManagerPromise = null;
 		};
@@ -1689,12 +1693,19 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 			unregisterCleanup(accountManagerCleanupHook);
 		}
 		accountManagerCleanupHook = async () => {
-			try {
-				await cachedAccountManager?.flushPendingSave();
-			} catch (error) {
-				logWarn("[shutdown] flushPendingSave failed; disabled state may not be persisted", {
-					error: error instanceof Error ? error.message : String(error),
-				});
+			const managersToFlush = new Set<AccountManager>(staleAccountManagersForCleanup);
+			staleAccountManagersForCleanup.clear();
+			if (cachedAccountManager) {
+				managersToFlush.add(cachedAccountManager);
+			}
+			for (const manager of managersToFlush) {
+				try {
+					await manager.flushPendingSave();
+				} catch (error) {
+					logWarn("[shutdown] flushPendingSave failed; disabled state may not be persisted", {
+						error: error instanceof Error ? error.message : String(error),
+					});
+				}
 			}
 		};
 		registerCleanup(accountManagerCleanupHook);
