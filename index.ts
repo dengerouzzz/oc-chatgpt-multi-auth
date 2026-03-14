@@ -203,6 +203,8 @@ import {
  * }
  * ```
  */
+export const MAX_PERSISTED_ACCOUNT_INDICATORS = 200;
+
 // eslint-disable-next-line @typescript-eslint/require-await
 export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 	initLogger(client);
@@ -213,7 +215,6 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 	let startupPreflightShown = false;
 	let beginnerSafeModeEnabled = false;
 	const MIN_BACKOFF_MS = 100;
-	const MAX_PERSISTED_ACCOUNT_INDICATORS = 200;
 
 	type PersistedAccountDetails = {
 		accountId?: string;
@@ -1430,6 +1431,9 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 			const persistAccountFooter = getPersistAccountFooter(pluginConfig);
 			const persistAccountFooterStyle =
 				getPersistAccountFooterStyle(pluginConfig);
+			if (runtimePersistAccountFooter && !persistAccountFooter) {
+				persistedAccountIndicators.clear();
+			}
 			runtimePluginConfigSnapshot = pluginConfig;
 			runtimePersistAccountFooter = persistAccountFooter;
 			runtimePersistAccountFooterStyle = persistAccountFooterStyle;
@@ -1946,6 +1950,9 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 			},
 			output: { message: unknown; parts: unknown[] },
 		): Promise<void> => {
+			if (!runtimePersistAccountFooter) {
+				return Promise.resolve();
+			}
 			const indicator = getPersistedAccountIndicatorLabel(
 				resolvePersistedAccountSessionID(input.sessionID),
 			);
@@ -1971,6 +1978,9 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 				}>;
 			},
 		): Promise<void> => {
+			if (!runtimePersistAccountFooter) {
+				return Promise.resolve();
+			}
 			let lastUserMessage:
 				| {
 					info: Record<string, unknown>;

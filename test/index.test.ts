@@ -2581,6 +2581,40 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		).toBe(expectedFullIndicator);
 	});
 
+	it("stops applying persisted indicators after the footer is disabled", async () => {
+		await enablePersistedFooter("full-email");
+		const { plugin, sdk } = await setupPlugin();
+		await sendPersistedAccountRequest(sdk, "session-footer-toggle");
+
+		expect((await readPersistedAccountIndicator(plugin, "session-footer-toggle")).variant).toBe(
+			expectedFullIndicator,
+		);
+
+		await disablePersistedFooter();
+		await sendPersistedAccountRequest(sdk, "session-footer-toggle");
+
+		const liveOutput = {
+			message: {
+				role: "user",
+				model: { providerID: "openai", modelID: "gpt-5.4" },
+			},
+			parts: [],
+		};
+		await plugin["chat.message"](
+			{
+				sessionID: "session-footer-toggle",
+				model: { providerID: "openai", modelID: "gpt-5.4" },
+			},
+			liveOutput,
+		);
+
+		expect((await readPersistedAccountIndicator(plugin, "session-footer-toggle")).variant).toBeUndefined();
+		expect((liveOutput.message as { variant?: string }).variant).toBeUndefined();
+		expect(
+			(liveOutput.message as { model?: { variant?: string } }).model?.variant,
+		).toBeUndefined();
+	});
+
 	it("suppresses account-switch info toasts when the footer is enabled and refreshes the visible indicator", async () => {
 		await enablePersistedFooter("full-email");
 		mockStorage.accounts = [
@@ -2926,9 +2960,9 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 			{ accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },
 			{ accountId: "acc-2", email: "user2@example.com", refreshToken: "refresh-2" },
 		];
-		const maxPersistedIndicators = 200;
+		const { MAX_PERSISTED_ACCOUNT_INDICATORS } = await import("../index.js");
 		const sessionIDs = Array.from(
-			{ length: maxPersistedIndicators },
+			{ length: MAX_PERSISTED_ACCOUNT_INDICATORS },
 			(_, index) => `session-overflow-${index}`,
 		);
 
