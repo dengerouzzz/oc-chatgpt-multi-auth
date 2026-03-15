@@ -257,6 +257,16 @@ describe("docs-check script", () => {
 		await expect(validateLink(docsFile, referenceTarget)).resolves.toBe("Missing local target: ./targets/missing.md");
 	});
 
+	it("extracts shortcut reference links so missing targets are still caught", async () => {
+		const { extractMarkdownLinks, validateLink } = await import("../scripts/ci/docs-check.js");
+		const { docsFile } = await createDocsFixture("[config]\n\n[config]: ./targets/missing.md\n");
+		const markdown = await readFile(docsFile, "utf8");
+		const [referenceTarget] = extractMarkdownLinks(markdown);
+
+		expect(referenceTarget).toBe("./targets/missing.md");
+		await expect(validateLink(docsFile, referenceTarget)).resolves.toBe("Missing local target: ./targets/missing.md");
+	});
+
 	it("ignores links that only appear inside HTML comments", async () => {
 		const { extractMarkdownLinks } = await import("../scripts/ci/docs-check.js");
 

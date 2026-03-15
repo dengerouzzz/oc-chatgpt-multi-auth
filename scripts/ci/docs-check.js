@@ -248,6 +248,7 @@ export function extractMarkdownLinks(markdown) {
 		.replace(/`[^`\n]+`/g, "`code`");
 	const openerPattern = /!?\[[^\]]*]\(/g;
 	const referencePattern = /!?\[([^\]]+)]\[([^\]]*)]/g;
+	const shortcutReferencePattern = /!?\[([^\]]+)](?![\[(]:)/g;
 	const referenceDefinitionPattern = /^\s{0,3}\[([^\]]+)]:\s+(.+)$/gm;
 	const links = [];
 	const referenceDefinitions = new Map();
@@ -270,6 +271,11 @@ export function extractMarkdownLinks(markdown) {
 	for (const match of stripped.matchAll(referencePattern)) {
 		const label = match[2]?.trim() ? match[2] : match[1];
 		const referenceTarget = referenceDefinitions.get(normalizeReferenceLabel(label ?? ""));
+		if (referenceTarget) links.push(referenceTarget);
+	}
+
+	for (const match of stripped.matchAll(shortcutReferencePattern)) {
+		const referenceTarget = referenceDefinitions.get(normalizeReferenceLabel(match[1] ?? ""));
 		if (referenceTarget) links.push(referenceTarget);
 	}
 
