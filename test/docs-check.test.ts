@@ -69,6 +69,14 @@ describe("docs-check script", () => {
 		await expect(validateLink(docsFile, "https://example.com/docs")).resolves.toBeNull();
 	});
 
+	it("requires an absolute markdown file path", async () => {
+		const { validateLink } = await import("../scripts/ci/docs-check.js");
+
+		await expect(validateLink("docs/guide.md", "./targets/exists.md", process.cwd())).rejects.toThrow(
+			'validateLink: filePath must be absolute, got "docs/guide.md"',
+		);
+	});
+
 	it("reports missing workflow badge targets", async () => {
 		const { validateLink } = await import("../scripts/ci/docs-check.js");
 		const { docsFile } = await createDocsFixture();

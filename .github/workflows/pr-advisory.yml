@@ -56,7 +56,7 @@ jobs:
             while IFS= read -r file; do
               files+=("${file}")
             done < <(git diff --name-only "origin/${BASE_REF}...HEAD")
-          elif [[ -n "${BEFORE_SHA}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
+          elif [[ "${EVENT_NAME}" == "push" && -n "${BEFORE_SHA}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
             while IFS= read -r file; do
               files+=("${file}")
             done < <(git diff --name-only "${BEFORE_SHA}...HEAD")

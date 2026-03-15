@@ -235,6 +235,10 @@ function getWorkflowPathFromUrl(target) {
 }
 
 export async function validateLink(filePath, linkTarget, rootDir = getRootDir()) {
+	if (!path.isAbsolute(filePath)) {
+		throw new TypeError(`validateLink: filePath must be absolute, got "${filePath}"`);
+	}
+
 	if (!linkTarget || linkTarget.startsWith("#")) return null;
 	if (/^(mailto:|tel:|data:)/i.test(linkTarget)) return null;
 
