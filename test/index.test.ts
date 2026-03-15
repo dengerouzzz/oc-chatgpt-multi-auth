@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { SessionModelRef } from "../lib/persist-account-footer.js";
 
 vi.mock("@opencode-ai/plugin/tool", () => {
 	const makeSchema = () => ({
@@ -421,7 +422,7 @@ type PluginType = {
 	"chat.message": (
 		input: {
 			sessionID: string;
-			model?: { providerID: string; modelID: string };
+			model?: SessionModelRef;
 		},
 		output: { message: unknown; parts: unknown[] },
 	) => Promise<void>;
@@ -432,11 +433,7 @@ type PluginType = {
 				info: {
 					role: string;
 					sessionID?: string;
-					model?: {
-						providerID?: string;
-						modelID?: string;
-						variant?: string;
-					};
+					model?: Partial<SessionModelRef> & { variant?: string };
 					variant?: string;
 					thinking?: string;
 				};
@@ -2620,6 +2617,38 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		expect((output.message as { model?: { variant?: string } }).model?.variant).toBe(
 			expectedFullIndicator,
 		);
+	});
+
+	it("does not apply a persisted footer when prompt_cache_key and hook session ids differ without CODEX_THREAD_ID", async () => {
+		await enablePersistedFooter("full-email");
+		const { plugin, sdk } = await setupPlugin();
+
+		await sendPersistedAccountRequest(sdk, "session-request-only");
+
+		const transformOutput = buildMessageTransformOutput("session-hook-only");
+		await plugin["experimental.chat.messages.transform"]({}, transformOutput);
+		expect(transformOutput.messages[0]?.info.variant).toBeUndefined();
+		expect(transformOutput.messages[0]?.info.model?.variant).toBeUndefined();
+
+		const liveOutput = {
+			message: {
+				role: "user",
+				model: { providerID: "openai", modelID: "gpt-5.4" },
+			},
+			parts: [],
+		};
+		await plugin["chat.message"](
+			{
+				sessionID: "session-hook-only",
+				model: { providerID: "openai", modelID: "gpt-5.4" },
+			},
+			liveOutput,
+		);
+
+		expect((liveOutput.message as { variant?: string }).variant).toBeUndefined();
+		expect(
+			(liveOutput.message as { model?: { variant?: string } }).model?.variant,
+		).toBeUndefined();
 	});
 
 	it("does not set the chat.message indicator when role is missing", async () => {

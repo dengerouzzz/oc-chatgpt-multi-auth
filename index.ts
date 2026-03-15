@@ -128,7 +128,12 @@ import {
 	type AccountStorageV3,
 	type FlaggedAccountMetadataV1,
 } from "./lib/storage.js";
-import type { PersistAccountFooterStyle } from "./lib/persist-account-footer.js";
+import type {
+	PersistAccountFooterStyle,
+	PersistedAccountDetails,
+	PersistedAccountIndicatorEntry,
+	SessionModelRef,
+} from "./lib/persist-account-footer.js";
 import {
 	createCodexHeaders,
 	extractRequestUrl,
@@ -217,25 +222,6 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 	let startupPreflightShown = false;
 	let beginnerSafeModeEnabled = false;
 	const MIN_BACKOFF_MS = 100;
-
-	type PersistedAccountDetails = {
-		accountId?: string;
-		accountIdSource?: AccountIdSource;
-		accountLabel?: string;
-		email?: string;
-		access?: string;
-		accessToken?: string;
-	};
-
-	type SessionModelRef = {
-		providerID: string;
-		modelID: string;
-	};
-
-	type PersistedAccountIndicatorEntry = {
-		label: string;
-		revision: number;
-	};
 
 	type SelectionSnapshot = {
 		timestamp: number;
@@ -2391,7 +2377,9 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 										let quotaKey = model ? `${modelFamily}:${model}` : modelFamily;
 						// When the host provides a runtime thread id, prefer it over
 						// prompt_cache_key so the fetch path stores indicators under the
-						// same session key that the chat hooks resolve later.
+						// same session key that the chat hooks resolve later. Without
+						// CODEX_THREAD_ID, the host has to reuse the same session id in the
+						// hooks or the persisted footer cannot be resolved back.
 						const threadIdCandidate =
 							resolvePersistedIndicatorSessionID(promptCacheKey);
 						const indicatorRevision = persistAccountFooter

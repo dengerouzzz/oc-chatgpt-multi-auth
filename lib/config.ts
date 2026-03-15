@@ -26,11 +26,22 @@ type PluginConfigWithFallbackMarker = PluginConfig & {
 	[FALLBACK_PLUGIN_CONFIG]?: true;
 };
 
+const markFallbackPluginConfig = <T extends PluginConfig>(config: T): T => {
+	if ((config as PluginConfigWithFallbackMarker)[FALLBACK_PLUGIN_CONFIG]) {
+		return config;
+	}
+	Object.defineProperty(config, FALLBACK_PLUGIN_CONFIG, {
+		value: true,
+		enumerable: false,
+	});
+	return config;
+};
+
 /**
  * Default plugin configuration
  * CODEX_MODE is enabled by default for better Codex CLI parity
  */
-export const DEFAULT_CONFIG: PluginConfig = {
+export const DEFAULT_CONFIG: PluginConfig = markFallbackPluginConfig({
 	codexMode: true,
 	requestTransformMode: "native",
 	codexTuiV2: true,
@@ -64,22 +75,7 @@ export const DEFAULT_CONFIG: PluginConfig = {
 	pidOffsetEnabled: false,
 	fetchTimeoutMs: 60_000,
 	streamStallTimeoutMs: 45_000,
-};
-
-const markFallbackPluginConfig = <T extends PluginConfig>(config: T): T => {
-	if ((config as PluginConfigWithFallbackMarker)[FALLBACK_PLUGIN_CONFIG]) {
-		return config;
-	}
-	Object.defineProperty(config, FALLBACK_PLUGIN_CONFIG, {
-		value: true,
-		enumerable: false,
-	});
-	return config;
-};
-
-// Keep the exported default config marked so tests and callers can model the
-// loader fallback path without depending on object identity.
-markFallbackPluginConfig(DEFAULT_CONFIG);
+});
 
 function createFallbackPluginConfig(): PluginConfig {
 	// Spread drops the non-enumerable fallback marker, so exact-default config
