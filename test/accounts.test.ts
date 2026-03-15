@@ -2409,9 +2409,50 @@ describe("AccountManager", () => {
       const savePromise = manager.saveToDisk();
       
       queueMicrotask(() => resolveInFlight!());
-      
+
       await manager.flushPendingSave();
       await savePromise;
+    });
+
+    it("tracks direct saveToDisk work so flushPendingSave waits for it", async () => {
+      const { saveAccounts } = await import("../lib/storage.js");
+      const mockSaveAccounts = vi.mocked(saveAccounts);
+      mockSaveAccounts.mockClear();
+
+      let resolveInFlight: (() => void) | undefined;
+      const inFlightSave = new Promise<void>((resolve) => {
+        resolveInFlight = resolve;
+      });
+      mockSaveAccounts.mockImplementation(() => inFlightSave);
+
+      const now = Date.now();
+      const stored = {
+        version: 3 as const,
+        activeIndex: 0,
+        accounts: [
+          { refreshToken: "token-1", addedAt: now, lastUsed: now },
+        ],
+      };
+
+      const manager = new AccountManager(undefined, stored);
+      const savePromise = manager.saveToDisk();
+      const flushPromise = manager.flushPendingSave();
+
+      expect(manager.hasPendingSave()).toBe(true);
+
+      let flushSettled = false;
+      void flushPromise.then(() => {
+        flushSettled = true;
+      });
+      await Promise.resolve();
+      expect(flushSettled).toBe(false);
+
+      resolveInFlight?.();
+      await savePromise;
+      await flushPromise;
+
+      expect(manager.hasPendingSave()).toBe(false);
+      expect(mockSaveAccounts).toHaveBeenCalledTimes(1);
     });
 
     it("waits for in-flight save before flushing a pending debounce", async () => {

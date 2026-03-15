@@ -1692,14 +1692,6 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 			typeof candidate.hasPendingSave === "function" ? candidate.hasPendingSave() : true;
 		const trackedManagerSettledWaits = new WeakMap<AccountManager, Promise<void>>();
 
-		const pruneTrackedAccountManagersForCleanup = (): void => {
-			for (const trackedManager of [...trackedAccountManagersForCleanup]) {
-				if (!managerHasPendingSave(trackedManager)) {
-					trackedAccountManagersForCleanup.delete(trackedManager);
-				}
-			}
-		};
-
 		const scheduleTrackedManagerPrune = (manager: AccountManager): void => {
 			if (
 				!managerHasPendingSave(manager) ||
@@ -1731,14 +1723,13 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 		};
 
 		const setCachedAccountManager = (manager: AccountManager): AccountManager => {
-			pruneTrackedAccountManagersForCleanup();
 			if (cachedAccountManager && cachedAccountManager !== manager) {
 				activeAccountManagersForCleanup.delete(cachedAccountManager);
+				// Detached managers can still enqueue their first debounced save after the
+				// cache switches. Keep them tracked until shutdown so that late work is flushed.
+				trackedAccountManagersForCleanup.add(cachedAccountManager);
 				if (managerHasPendingSave(cachedAccountManager)) {
-					trackedAccountManagersForCleanup.add(cachedAccountManager);
 					scheduleTrackedManagerPrune(cachedAccountManager);
-				} else {
-					trackedAccountManagersForCleanup.delete(cachedAccountManager);
 				}
 			}
 			activeAccountManagersForCleanup.add(manager);
@@ -1749,14 +1740,13 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 		};
 
 		const invalidateAccountManagerCache = (): void => {
-			pruneTrackedAccountManagersForCleanup();
 			if (cachedAccountManager) {
 				activeAccountManagersForCleanup.delete(cachedAccountManager);
+				// Once detached, this manager may still persist state from in-flight request
+				// handlers. Keep it in the shutdown tracking set until cleanup runs.
+				trackedAccountManagersForCleanup.add(cachedAccountManager);
 				if (managerHasPendingSave(cachedAccountManager)) {
-					trackedAccountManagersForCleanup.add(cachedAccountManager);
 					scheduleTrackedManagerPrune(cachedAccountManager);
-				} else {
-					trackedAccountManagersForCleanup.delete(cachedAccountManager);
 				}
 			}
 			cachedAccountManager = null;

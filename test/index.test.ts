@@ -4205,6 +4205,76 @@ describe("OpenAIOAuthPlugin persistAccountPool", () => {
 		expect(flushManagerTwo).toHaveBeenCalledTimes(1);
 	});
 
+	it("keeps idle detached managers tracked until shutdown in case they enqueue a later save", async () => {
+		const accountsModule = await import("../lib/accounts.js");
+		const cliModule = await import("../lib/cli.js");
+		const managerOne = await accountsModule.AccountManager.loadFromDisk();
+		const managerTwo = await accountsModule.AccountManager.loadFromDisk();
+		const flushManagerOne = vi.fn(async () => {});
+		const flushManagerTwo = vi.fn(async () => {});
+		let managerOneHasPendingSave = false;
+		managerOne.flushPendingSave = flushManagerOne;
+		managerTwo.flushPendingSave = flushManagerTwo;
+		managerOne.hasPendingSave = vi.fn(() => managerOneHasPendingSave);
+		managerTwo.hasPendingSave = vi.fn(() => false);
+		vi.spyOn(accountsModule.AccountManager, "loadFromDisk")
+			.mockResolvedValueOnce(managerOne)
+			.mockResolvedValue(managerTwo);
+
+		mockStorage.accounts = [
+			{
+				accountId: "workspace-managed",
+				email: "managed@example.com",
+				refreshToken: "refresh-managed",
+				addedAt: 10,
+				lastUsed: 10,
+			},
+		];
+
+		vi.mocked(cliModule.promptLoginMode)
+			.mockResolvedValueOnce({ mode: "manage", toggleAccountIndex: 0 })
+			.mockResolvedValueOnce({ mode: "cancel" });
+
+		const mockClient = createMockClient();
+		const { OpenAIOAuthPlugin } = await import("../index.js");
+		const plugin = (await OpenAIOAuthPlugin({
+			client: mockClient,
+		} as never)) as unknown as PluginType;
+		const autoMethod = plugin.auth.methods[0] as unknown as {
+			authorize: (inputs?: Record<string, string>) => Promise<{ instructions: string }>;
+		};
+
+		await plugin.auth.loader(
+			async () => ({
+				type: "oauth",
+				access: "access-token-1",
+				refresh: "refresh-token-1",
+				expires: Date.now() + 60_000,
+			}) as never,
+			{},
+		);
+
+		flushManagerOne.mockClear();
+		const authResult = await autoMethod.authorize();
+		expect(authResult.instructions).toBe("Authentication cancelled");
+
+		await plugin.auth.loader(
+			async () => ({
+				type: "oauth",
+				access: "access-token-2",
+				refresh: "refresh-token-2",
+				expires: Date.now() + 60_000,
+			}) as never,
+			{},
+		);
+
+		managerOneHasPendingSave = true;
+		await runCleanup();
+
+		expect(flushManagerOne).toHaveBeenCalledTimes(1);
+		expect(flushManagerTwo).toHaveBeenCalledTimes(1);
+	});
+
 	it("prunes tracked invalidated managers once their pending saves settle", async () => {
 		const accountsModule = await import("../lib/accounts.js");
 		const cliModule = await import("../lib/cli.js");

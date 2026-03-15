@@ -284,7 +284,7 @@ export class AccountManager {
 		if (!changed) return;
 
 		try {
-			await this.enqueueSave(() => this.saveToDisk());
+			await this.saveToDisk();
 		} catch (error) {
 			log.debug("Failed to persist Codex CLI cache hydration", { error: String(error) });
 		}
@@ -994,7 +994,7 @@ export class AccountManager {
 		return result.ok ? result.account : null;
 	}
 
-	async saveToDisk(): Promise<void> {
+	private async persistToDisk(): Promise<void> {
 		const activeIndexByFamily: Partial<Record<ModelFamily, number>> = {};
 		for (const family of MODEL_FAMILIES) {
 			const raw = this.currentAccountIndexByFamily[family];
@@ -1033,6 +1033,10 @@ export class AccountManager {
 		};
 
 		await saveAccounts(storage);
+	}
+
+	async saveToDisk(): Promise<void> {
+		return this.enqueueSave(() => this.persistToDisk());
 	}
 
 	private enqueueSave(saveOperation: () => Promise<void>): Promise<void> {
@@ -1118,7 +1122,7 @@ export class AccountManager {
 			this.saveDebounceTimer = null;
 			const doSave = async () => {
 				try {
-					await this.enqueueSave(() => this.saveToDisk());
+					await this.saveToDisk();
 				} catch (error) {
 					log.warn("Debounced save failed", { error: error instanceof Error ? error.message : String(error) });
 				}
@@ -1189,7 +1193,7 @@ export class AccountManager {
 				continue;
 			}
 			const flushSaveTick = this.saveFinalizationTick;
-			const flushSave = this.enqueueSave(() => this.saveToDisk());
+			const flushSave = this.saveToDisk();
 			let flushSaveError: unknown;
 			try {
 				await flushSave;
