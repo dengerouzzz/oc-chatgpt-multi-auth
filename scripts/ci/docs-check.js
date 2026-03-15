@@ -184,6 +184,7 @@ function extractLinkTarget(markdown, startIndex) {
 
 export function extractMarkdownLinks(markdown) {
 	const stripped = markdown
+		.replace(/<!--[\s\S]*?-->/g, "")
 		.replace(/```[\s\S]*?```/g, "\n")
 		.replace(/`[^`\n]+`/g, "`code`");
 	const openerPattern = /!?\[[^\]]*]\(/g;

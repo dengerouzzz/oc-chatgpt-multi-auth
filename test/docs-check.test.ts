@@ -123,6 +123,14 @@ describe("docs-check script", () => {
 		await expect(validateLink(docsFile, referenceTarget)).resolves.toBe("Missing local target: ./targets/missing.md");
 	});
 
+	it("ignores links that only appear inside HTML comments", async () => {
+		const { extractMarkdownLinks } = await import("../scripts/ci/docs-check.js");
+
+		const markdown = "<!-- [deprecated](./targets/missing.md) -->\n[Config Guide](./targets/exists.md)\n";
+
+		expect(extractMarkdownLinks(markdown)).toEqual(["./targets/exists.md"]);
+	});
+
 	it("accepts angle-bracket targets that include an optional title", async () => {
 		const { extractMarkdownLinks, validateLink } = await import("../scripts/ci/docs-check.js");
 		const { docsFile } = await createDocsFixture('[Config Guide](<./targets/exists.md> "Config target")\n');
