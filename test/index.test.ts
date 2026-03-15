@@ -2484,6 +2484,32 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		).toBe(expectedFullIndicator);
 	});
 
+	it("prefers CODEX_THREAD_ID over a non-empty transform session id when looking up the footer", async () => {
+		await enablePersistedFooter("full-email");
+		process.env.CODEX_THREAD_ID = "env-transform-priority";
+		const { plugin, sdk } = await setupPlugin();
+
+		await sendPersistedAccountRequest(sdk, "session-explicit");
+
+		const output: Parameters<PluginType["experimental.chat.messages.transform"]>[1] = {
+			messages: [
+				{
+					info: {
+						role: "user",
+						sessionID: "session-different",
+						model: { providerID: "openai", modelID: "gpt-5.1" },
+					},
+					parts: [],
+				},
+			],
+		};
+		await plugin["experimental.chat.messages.transform"]({}, output);
+
+		expect(
+			output.messages[0]?.info.model?.variant ?? output.messages[0]?.info.variant,
+		).toBe(expectedFullIndicator);
+	});
+
 	it("falls back to CODEX_THREAD_ID in chat.message when the session id is empty", async () => {
 		await enablePersistedFooter("full-email");
 		process.env.CODEX_THREAD_ID = "env-chat-message";
@@ -2501,6 +2527,34 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		await plugin["chat.message"](
 			{
 				sessionID: "",
+				model: { providerID: "openai", modelID: "gpt-5.4" },
+			},
+			output,
+		);
+
+		expect((output.message as { variant?: string }).variant).toBe(expectedFullIndicator);
+		expect((output.message as { model?: { variant?: string } }).model?.variant).toBe(
+			expectedFullIndicator,
+		);
+	});
+
+	it("prefers CODEX_THREAD_ID over a non-empty chat.message session id when looking up the footer", async () => {
+		await enablePersistedFooter("full-email");
+		process.env.CODEX_THREAD_ID = "env-chat-priority";
+		const { plugin, sdk } = await setupPlugin();
+
+		await sendPersistedAccountRequest(sdk, "session-explicit");
+
+		const output = {
+			message: {
+				role: "user",
+				model: { providerID: "openai", modelID: "gpt-5.4" },
+			},
+			parts: [],
+		};
+		await plugin["chat.message"](
+			{
+				sessionID: "session-different",
 				model: { providerID: "openai", modelID: "gpt-5.4" },
 			},
 			output,
