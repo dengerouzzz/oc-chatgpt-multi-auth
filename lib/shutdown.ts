@@ -25,7 +25,6 @@ export function runCleanup(): Promise<void> {
 		return cleanupInFlight;
 	}
 
-	const keepHandlersInstalled = signalExitPending;
 	cleanupInFlight = (async () => {
 		while (cleanupFunctions.length > 0) {
 			const fns = [...cleanupFunctions];
@@ -41,7 +40,7 @@ export function runCleanup(): Promise<void> {
 		}
 	})().finally(() => {
 		cleanupInFlight = null;
-		if (!keepHandlersInstalled) {
+		if (!signalExitPending) {
 			removeShutdownHandlers();
 			shutdownRegistered = false;
 		}

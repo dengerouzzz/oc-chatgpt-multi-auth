@@ -3906,16 +3906,17 @@ describe("OpenAIOAuthPlugin persistAccountPool", () => {
 		expect(flushManagerTwo).toHaveBeenCalledTimes(1);
 	});
 
-	it("drops invalidated managers without pending saves from shutdown cleanup tracking", async () => {
+	it("prunes tracked invalidated managers once their pending saves settle", async () => {
 		const accountsModule = await import("../lib/accounts.js");
 		const cliModule = await import("../lib/cli.js");
 		const managerOne = await accountsModule.AccountManager.loadFromDisk();
 		const managerTwo = await accountsModule.AccountManager.loadFromDisk();
 		const flushManagerOne = vi.fn(async () => {});
 		const flushManagerTwo = vi.fn(async () => {});
+		let managerOneHasPendingSave = true;
 		managerOne.flushPendingSave = flushManagerOne;
 		managerTwo.flushPendingSave = flushManagerTwo;
-		managerOne.hasPendingSave = vi.fn(() => false);
+		managerOne.hasPendingSave = vi.fn(() => managerOneHasPendingSave);
 		managerTwo.hasPendingSave = vi.fn(() => false);
 		vi.spyOn(accountsModule.AccountManager, "loadFromDisk")
 			.mockResolvedValueOnce(managerOne)
@@ -3959,6 +3960,7 @@ describe("OpenAIOAuthPlugin persistAccountPool", () => {
 		const authResult = await autoMethod.authorize();
 		expect(authResult.instructions).toBe("Authentication cancelled");
 
+		managerOneHasPendingSave = false;
 		await plugin.auth.loader(
 			async () => ({
 				type: "oauth",

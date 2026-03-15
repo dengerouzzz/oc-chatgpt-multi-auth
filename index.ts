@@ -1684,9 +1684,19 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 			}
 		};
 
+		const managerHasPendingSave = (candidate: AccountManager): boolean =>
+			typeof candidate.hasPendingSave === "function" ? candidate.hasPendingSave() : true;
+
+		const pruneTrackedAccountManagersForCleanup = (): void => {
+			for (const trackedManager of [...trackedAccountManagersForCleanup]) {
+				if (!managerHasPendingSave(trackedManager)) {
+					trackedAccountManagersForCleanup.delete(trackedManager);
+				}
+			}
+		};
+
 		const setCachedAccountManager = (manager: AccountManager): AccountManager => {
-			const managerHasPendingSave = (candidate: AccountManager): boolean =>
-				typeof candidate.hasPendingSave === "function" ? candidate.hasPendingSave() : true;
+			pruneTrackedAccountManagersForCleanup();
 			if (cachedAccountManager && cachedAccountManager !== manager) {
 				activeAccountManagersForCleanup.delete(cachedAccountManager);
 				if (managerHasPendingSave(cachedAccountManager)) {
@@ -1703,8 +1713,7 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 		};
 
 		const invalidateAccountManagerCache = (): void => {
-			const managerHasPendingSave = (candidate: AccountManager): boolean =>
-				typeof candidate.hasPendingSave === "function" ? candidate.hasPendingSave() : true;
+			pruneTrackedAccountManagersForCleanup();
 			if (cachedAccountManager) {
 				activeAccountManagersForCleanup.delete(cachedAccountManager);
 				if (managerHasPendingSave(cachedAccountManager)) {
