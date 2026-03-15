@@ -188,13 +188,12 @@ jobs:
               }
             }
 
-            await ensureLabel(
-              maintainerVerifiedLabelName,
-              "0e8a16",
-              "Maintainer completed independent live ChatGPT Plus/Pro verification",
-            );
-
             if (liveVerificationRequired) {
+              await ensureLabel(
+                maintainerVerifiedLabelName,
+                "0e8a16",
+                "Maintainer completed independent live ChatGPT Plus/Pro verification",
+              );
               await ensureLabel(
                 liveVerificationLabelName,
                 "b60205",

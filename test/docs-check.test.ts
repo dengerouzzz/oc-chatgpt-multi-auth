@@ -218,6 +218,53 @@ describe("docs-check script", () => {
 		}
 	});
 
+	it("memoizes repository metadata per root during workflow badge validation", async () => {
+		const { validateLink } = await import("../scripts/ci/docs-check.js");
+		const { root } = await createExternalFixture({
+			"package.json": JSON.stringify(
+				{
+					name: "fixture-docs-check",
+					repository: {
+						type: "git",
+						url: "git+https://github.com/example/docs-fixture.git",
+					},
+				},
+				null,
+				2,
+			),
+			"docs/guide.md": "# Guide\n",
+		});
+		const docsFile = path.join(root, "docs", "guide.md");
+		const originalRepository = process.env.GITHUB_REPOSITORY;
+		delete process.env.GITHUB_REPOSITORY;
+
+		try {
+			await expect(
+				validateLink(
+					docsFile,
+					"https://github.com/example/docs-fixture/actions/workflows/missing.yml/badge.svg",
+					root,
+				),
+			).resolves.toBe("Missing workflow referenced by GitHub Actions badge/link: missing.yml");
+
+			await rm(path.join(root, "package.json"));
+
+			await expect(
+				validateLink(
+					docsFile,
+					"https://github.com/example/docs-fixture/actions/workflows/missing.yml/badge.svg",
+					root,
+				),
+			).resolves.toBe("Missing workflow referenced by GitHub Actions badge/link: missing.yml");
+		} finally {
+			if (originalRepository === undefined) {
+				delete process.env.GITHUB_REPOSITORY;
+			} else {
+				process.env.GITHUB_REPOSITORY = originalRepository;
+			}
+		}
+	});
+
 	it("skips workflow badge validation when repository metadata cannot be resolved", async () => {
 		const { validateLink } = await import("../scripts/ci/docs-check.js");
 		const { root } = await createExternalFixture({
@@ -341,6 +388,26 @@ describe("docs-check script", () => {
 		const { extractMarkdownLinks } = await import("../scripts/ci/docs-check.js");
 
 		const markdown = "~~~bash\n[missing](./targets/missing.md)\n~~~\n[Config Guide](./targets/exists.md)\n";
+
+		expect(extractMarkdownLinks(markdown)).toEqual(["./targets/exists.md"]);
+	});
+
+	it("ignores links after inner fences that appear inside a larger fenced code block", async () => {
+		const { extractMarkdownLinks } = await import("../scripts/ci/docs-check.js");
+
+		const markdown = [
+			"````markdown",
+			"```",
+			"Use fenced blocks like:",
+			"```yaml",
+			"key: value",
+			"```",
+			"The link [guide](./targets/missing.md) is here.",
+			"```",
+			"````",
+			"[Config Guide](./targets/exists.md)",
+			"",
+		].join("\n");
 
 		expect(extractMarkdownLinks(markdown)).toEqual(["./targets/exists.md"]);
 	});

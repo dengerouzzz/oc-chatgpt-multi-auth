@@ -10,6 +10,7 @@ const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
 const IGNORED_DIRS = new Set([".git", ".github/workflows", ".omx", "dist", "node_modules", "tmp"]);
 const MARKDOWN_PATH_ESCAPE_PATTERN = /\\([\x20-\x2F\x3A-\x40\x5B-\x60\x7B-\x7E])/g;
 const __filename = fileURLToPath(import.meta.url);
+const repositorySlugCache = new Map();
 
 function getRootDir() {
 	return process.cwd();
@@ -54,30 +55,40 @@ function extractRepositorySlug(repositoryValue) {
 
 function getRepositorySlug(rootDir = getRootDir()) {
 	const githubRepository = process.env.GITHUB_REPOSITORY?.trim();
+	const cacheKey = `${normalizePathForCompare(rootDir)}::${githubRepository ?? ""}`;
+	if (repositorySlugCache.has(cacheKey)) {
+		return repositorySlugCache.get(cacheKey);
+	}
+
+	let repositorySlug = null;
 	if (githubRepository && /^[^/]+\/[^/]+$/.test(githubRepository)) {
-		return githubRepository;
+		repositorySlug = githubRepository;
+	} else {
+		try {
+			const packageJson = JSON.parse(readFileSync(path.join(rootDir, "package.json"), "utf8"));
+			const repositoryField =
+				typeof packageJson.repository === "string" ? packageJson.repository : packageJson.repository?.url;
+			repositorySlug = extractRepositorySlug(repositoryField);
+		} catch {
+			// Ignore package.json lookup failures and fall back to git metadata.
+		}
+
+		if (!repositorySlug) {
+			try {
+				const remoteUrl = execFileSync("git", ["config", "--get", "remote.origin.url"], {
+					cwd: rootDir,
+					encoding: "utf8",
+					stdio: ["ignore", "pipe", "ignore"],
+				}).trim();
+				repositorySlug = extractRepositorySlug(remoteUrl);
+			} catch {
+				repositorySlug = null;
+			}
+		}
 	}
 
-	try {
-		const packageJson = JSON.parse(readFileSync(path.join(rootDir, "package.json"), "utf8"));
-		const repositoryField =
-			typeof packageJson.repository === "string" ? packageJson.repository : packageJson.repository?.url;
-		const repositoryFromPackage = extractRepositorySlug(repositoryField);
-		if (repositoryFromPackage) return repositoryFromPackage;
-	} catch {
-		// Ignore package.json lookup failures and fall back to git metadata.
-	}
-
-	try {
-		const remoteUrl = execFileSync("git", ["config", "--get", "remote.origin.url"], {
-			cwd: rootDir,
-			encoding: "utf8",
-			stdio: ["ignore", "pipe", "ignore"],
-		}).trim();
-		return extractRepositorySlug(remoteUrl);
-	} catch {
-		return null;
-	}
+	repositorySlugCache.set(cacheKey, repositorySlug);
+	return repositorySlug;
 }
 
 function normalizeLinkTarget(rawTarget) {
@@ -240,11 +251,42 @@ function extractLinkTarget(markdown, startIndex) {
 }
 
 export function extractMarkdownLinks(markdown) {
-	const fencedCodePattern = new RegExp("(?:`{3}|~{3})[\\s\\S]*?(?:`{3}|~{3})", "g");
-	const stripped = markdown
-		.replace(/<!--[\s\S]*?-->/g, "")
-		.replace(fencedCodePattern, "\n")
-		.replace(/`[^`\n]+`/g, "`code`");
+	const stripMarkdownCode = (source) => {
+		const output = [];
+		const lines = source.split(/\r?\n/);
+		let inFence = false;
+		let fenceChar = "";
+		let fenceLength = 0;
+
+		for (const line of lines) {
+			if (!inFence) {
+				const openingFence = line.match(/^(?: {0,3})(`{3,}|~{3,})[^\n]*$/);
+				if (openingFence) {
+					inFence = true;
+					fenceChar = openingFence[1][0];
+					fenceLength = openingFence[1].length;
+					output.push("");
+					continue;
+				}
+
+				output.push(line);
+				continue;
+			}
+
+			const closingFence = new RegExp(`^(?: {0,3})${fenceChar}{${fenceLength},}[^\\n]*$`);
+			if (closingFence.test(line)) {
+				inFence = false;
+				fenceChar = "";
+				fenceLength = 0;
+			}
+
+			output.push("");
+		}
+
+		return output.join("\n").replace(/(`+)([^`\n]|`(?!\1))*\1/g, "");
+	};
+
+	const stripped = stripMarkdownCode(markdown.replace(/<!--[\s\S]*?-->/g, ""));
 	const openerPattern = /!?\[[^\]]*]\(/g;
 	const referencePattern = /!?\[([^\]]+)]\[([^\]]*)]/g;
 	const shortcutReferencePattern = /(?<!])!?\[([^\]]+)](?![\[(]|:)/g;
