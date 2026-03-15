@@ -123,6 +123,19 @@ describe("docs-check script", () => {
 		);
 	});
 
+	it("decodes URL-escaped local paths before checking the filesystem", async () => {
+		const { validateLink } = await import("../scripts/ci/docs-check.js");
+		const { root } = await createRepoFixture({
+			"docs/guide.md": "[Space](./My%20Guide.md)\n[Literal](./bad%2Gname.md)\n",
+			"docs/My Guide.md": "# Decoded path target\n",
+			"docs/bad%2Gname.md": "# Literal percent target\n",
+		});
+		const docsFile = path.join(root, "docs", "guide.md");
+
+		await expect(validateLink(docsFile, "./My%20Guide.md", root)).resolves.toBeNull();
+		await expect(validateLink(docsFile, "./bad%2Gname.md", root)).resolves.toBeNull();
+	});
+
 	it("normalizes direct-run paths consistently for the current platform", async () => {
 		const { normalizePathForCompare } = await import("../scripts/ci/docs-check.js");
 

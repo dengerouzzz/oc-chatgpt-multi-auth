@@ -256,7 +256,14 @@ export async function validateLink(filePath, linkTarget, rootDir = getRootDir())
 	const [rawPath] = linkTarget.split(/[?#]/, 1);
 	if (!rawPath) return null;
 
-	const resolvedPath = path.resolve(path.dirname(filePath), rawPath);
+	let decodedPath = rawPath;
+	try {
+		decodedPath = decodeURIComponent(rawPath);
+	} catch {
+		decodedPath = rawPath;
+	}
+
+	const resolvedPath = path.resolve(path.dirname(filePath), decodedPath);
 	const relativeToRoot = path.relative(rootDir, resolvedPath);
 	if (relativeToRoot.startsWith("..") || path.isAbsolute(relativeToRoot)) {
 		return `Local target escapes repository root: ${rawPath}`;
