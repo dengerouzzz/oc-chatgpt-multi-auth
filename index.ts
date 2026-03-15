@@ -2635,10 +2635,12 @@ while (attempted.size < Math.max(1, accountCount)) {
 
 										const waitMs = accountManager.getMinWaitTimeForFamily(modelFamily, model);
 										const count = accountManager.getAccountCount();
+										const hasFiniteWait = Number.isFinite(waitMs);
 
 								if (
 									retryAllAccountsRateLimited &&
 									count > 0 &&
+									hasFiniteWait &&
 									waitMs > 0 &&
 									(retryAllAccountsMaxWaitMs === 0 ||
 										waitMs <= retryAllAccountsMaxWaitMs) &&
@@ -2654,12 +2656,19 @@ while (attempted.size < Math.max(1, accountCount)) {
 									continue;
 								}
 
-								const waitLabel = waitMs > 0 ? formatWaitTime(waitMs) : "a bit";
+								const waitLabel =
+									waitMs > 0
+										? hasFiniteWait
+											? formatWaitTime(waitMs)
+											: "an indefinite wait"
+										: "a bit";
 								const message =
 									count === 0
 										? "No Codex accounts configured. Run `opencode auth login`."
 										: waitMs > 0
-											? `All ${count} account(s) are rate-limited. Try again in ${waitLabel} or add another account with \`opencode auth login\`.`
+											? hasFiniteWait
+												? `All ${count} account(s) are rate-limited. Try again in ${waitLabel} or add another account with \`opencode auth login\`.`
+												: `All ${count} account(s) are rate-limited indefinitely. Re-enable token refill or add another account with \`opencode auth login\`.`
 											: `All ${count} account(s) failed (server errors or auth issues). Check account health with \`codex-health\`.`;
 								runtimeMetrics.failedRequests++;
 								runtimeMetrics.lastError = message;

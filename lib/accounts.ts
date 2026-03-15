@@ -219,10 +219,7 @@ type AccountAvailabilitySnapshot = {
 };
 
 function getRequestAttemptKey(account: Pick<ManagedAccount, "immutableId" | "organizationId">): string {
-	return [
-		account.immutableId,
-		account.organizationId ?? "",
-	].join("::");
+	return account.immutableId;
 }
 
 export class AccountManager {
@@ -447,7 +444,7 @@ export class AccountManager {
 		const enabled = account.enabled !== false;
 		const rateLimited = isRateLimitedForFamily(account, family, model);
 		const coolingDown = this.isAccountCoolingDown(account);
-		const quotaKey = model ? `${family}:${model}` : family;
+		const quotaKey = getQuotaKey(family, model);
 		const tokensAvailable = tokenTracker.getTokens(account.index, quotaKey);
 		const eligible = enabled && !rateLimited && !coolingDown && tokensAvailable >= 1;
 		return {
@@ -464,7 +461,7 @@ export class AccountManager {
 		model?: string | null,
 		now = nowMs(),
 	): AccountSelectionExplainability[] {
-		const quotaKey = model ? `${family}:${model}` : family;
+		const quotaKey = getQuotaKey(family, model);
 		const baseQuotaKey = getQuotaKey(family);
 		const modelQuotaKey = model ? getQuotaKey(family, model) : null;
 		const currentIndex = this.currentAccountIndexByFamily[family];
@@ -636,7 +633,7 @@ export class AccountManager {
 			}
 		}
 
-		const quotaKey = model ? `${family}:${model}` : family;
+		const quotaKey = getQuotaKey(family, model);
 		const healthTracker = getHealthTracker();
 		const tokenTracker = getTokenTracker();
 
@@ -676,7 +673,7 @@ export class AccountManager {
 		if (count === 0) return null;
 
 		const attemptedAccountKeys = options.attemptedAccountKeys ?? new Set<string>();
-		const quotaKey = model ? `${family}:${model}` : family;
+		const quotaKey = getQuotaKey(family, model);
 		const healthTracker = getHealthTracker();
 		const tokenTracker = getTokenTracker();
 		const currentIndex = this.currentAccountIndexByFamily[family];
@@ -743,13 +740,13 @@ export class AccountManager {
 	}
 
 	recordSuccess(account: ManagedAccount, family: ModelFamily, model?: string | null): void {
-		const quotaKey = model ? `${family}:${model}` : family;
+		const quotaKey = getQuotaKey(family, model);
 		const healthTracker = getHealthTracker();
 		healthTracker.recordSuccess(account.index, quotaKey);
 	}
 
 	recordRateLimit(account: ManagedAccount, family: ModelFamily, model?: string | null): void {
-		const quotaKey = model ? `${family}:${model}` : family;
+		const quotaKey = getQuotaKey(family, model);
 		const healthTracker = getHealthTracker();
 		const tokenTracker = getTokenTracker();
 		healthTracker.recordRateLimit(account.index, quotaKey);
@@ -757,13 +754,13 @@ export class AccountManager {
 	}
 
 	recordFailure(account: ManagedAccount, family: ModelFamily, model?: string | null): void {
-		const quotaKey = model ? `${family}:${model}` : family;
+		const quotaKey = getQuotaKey(family, model);
 		const healthTracker = getHealthTracker();
 		healthTracker.recordFailure(account.index, quotaKey);
 	}
 
 	consumeToken(account: ManagedAccount, family: ModelFamily, model?: string | null): boolean {
-		const quotaKey = model ? `${family}:${model}` : family;
+		const quotaKey = getQuotaKey(family, model);
 		const tokenTracker = getTokenTracker();
 		return tokenTracker.tryConsume(account.index, quotaKey);
 	}
@@ -774,7 +771,7 @@ export class AccountManager {
 	 * @returns true if refund was successful, false if no valid consumption found
 	 */
 	refundToken(account: ManagedAccount, family: ModelFamily, model?: string | null): boolean {
-		const quotaKey = model ? `${family}:${model}` : family;
+		const quotaKey = getQuotaKey(family, model);
 		const tokenTracker = getTokenTracker();
 		return tokenTracker.refundToken(account.index, quotaKey);
 	}
@@ -911,7 +908,7 @@ export class AccountManager {
 
 	getMinWaitTimeForFamily(family: ModelFamily, model?: string | null): number {
 		const now = nowMs();
-		const quotaKey = model ? `${family}:${model}` : family;
+		const quotaKey = getQuotaKey(family, model);
 		const tokenTracker = getTokenTracker();
 		const enabledAccounts = this.accounts.filter((account) => account.enabled !== false);
 		const available = enabledAccounts.filter((account) => {
@@ -946,7 +943,7 @@ export class AccountManager {
 
 			const tokenWaitMs = tokenTracker.getWaitTimeUntilTokenAvailable(account.index, quotaKey);
 			if (tokenWaitMs > 0) {
-				accountWaits.push(tokenWaitMs);
+				accountWaits.push(Number.isFinite(tokenWaitMs) ? tokenWaitMs : Number.POSITIVE_INFINITY);
 			}
 
 			if (accountWaits.length > 0) {
@@ -955,8 +952,7 @@ export class AccountManager {
 		}
 
 		if (waitTimes.length === 0) return 0;
-		const minWait = Math.min(...waitTimes);
-		return Number.isFinite(minWait) ? minWait : Number.MAX_SAFE_INTEGER;
+		return Math.min(...waitTimes);
 	}
 
 	removeAccount(account: ManagedAccount): boolean {

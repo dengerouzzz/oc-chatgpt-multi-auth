@@ -149,6 +149,20 @@ describe("HealthScoreTracker", () => {
 		});
 	});
 
+	describe("reindexAfterRemoval", () => {
+		it("preserves model-qualified keys for surviving health entries", () => {
+			tracker.recordFailure(0, "codex:gpt-5.1");
+			tracker.recordRateLimit(1, "codex:gpt-5.1");
+
+			tracker.reindexAfterRemoval(0);
+
+			expect(tracker.getScore(0, "codex:gpt-5.1")).toBe(
+				DEFAULT_HEALTH_SCORE_CONFIG.maxScore + DEFAULT_HEALTH_SCORE_CONFIG.rateLimitDelta,
+			);
+			expect(tracker.getScore(1, "codex:gpt-5.1")).toBe(DEFAULT_HEALTH_SCORE_CONFIG.maxScore);
+		});
+	});
+
 	describe("quotaKey isolation", () => {
 		it("isolates scores by quotaKey", () => {
 			tracker.recordFailure(0, "quota-a");
@@ -318,6 +332,20 @@ describe("TokenBucketTracker", () => {
 
 			expect(tracker.getTokens(0)).toBe(DEFAULT_TOKEN_BUCKET_CONFIG.maxTokens);
 			expect(tracker.getTokens(1)).toBe(DEFAULT_TOKEN_BUCKET_CONFIG.maxTokens);
+		});
+	});
+
+	describe("reindexAfterRemoval", () => {
+		it("preserves model-qualified keys for surviving accounts", () => {
+			tracker.drain(0, "codex:gpt-5.1", 10);
+			tracker.drain(1, "codex:gpt-5.1", 20);
+
+			tracker.reindexAfterRemoval(0);
+
+			expect(tracker.getTokens(0, "codex:gpt-5.1")).toBe(
+				DEFAULT_TOKEN_BUCKET_CONFIG.maxTokens - 20,
+			);
+			expect(tracker.getTokens(1, "codex:gpt-5.1")).toBe(DEFAULT_TOKEN_BUCKET_CONFIG.maxTokens);
 		});
 	});
 });

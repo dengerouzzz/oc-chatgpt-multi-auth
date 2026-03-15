@@ -2230,6 +2230,29 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		expect(recordRateLimitSpy).not.toHaveBeenCalled();
 	});
 
+	it("returns 429 without sleeping when all account waits are indefinite", async () => {
+		const { AccountManager } = await import("../lib/accounts.js");
+		const accounts = [
+			{ index: 0, accountId: "acc-1", email: "user1@example.com", refreshToken: "refresh-1" },
+		];
+		const customManager = createRequestAwareManager(accounts, {
+			select: () => null,
+			getMinWaitTimeForFamily: () => Number.POSITIVE_INFINITY,
+		});
+		vi.spyOn(AccountManager, "loadFromDisk").mockResolvedValueOnce(customManager as never);
+		globalThis.fetch = vi.fn();
+
+		const { sdk } = await setupPlugin();
+		const response = await sdk.fetch!("https://api.openai.com/v1/chat", {
+			method: "POST",
+			body: JSON.stringify({ model: "gpt-5.1" }),
+		});
+
+		expect(response.status).toBe(429);
+		await expect(response.text()).resolves.toContain("rate-limited indefinitely");
+		expect(globalThis.fetch).not.toHaveBeenCalled();
+	});
+
 	it("rotates to the next account after a 5xx response", async () => {
 		const { AccountManager } = await import("../lib/accounts.js");
 		const fetchHelpers = await import("../lib/request/fetch-helpers.js");

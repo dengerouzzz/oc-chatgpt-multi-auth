@@ -183,6 +183,23 @@ describe("Multi-Account Rotation Integration", () => {
       expect(getHealthTracker().getScore(0, "codex")).toBe(DEFAULT_HEALTH_SCORE_CONFIG.maxScore);
     });
 
+    it("keeps a held survivor reference aligned with reindexed token buckets after removal", () => {
+      const family: ModelFamily = "codex";
+      const firstAccount = manager.getCurrentOrNextForFamily(family);
+      const survivor = manager.getCurrentOrNextForFamily(family);
+
+      expect(firstAccount?.index).toBe(0);
+      expect(survivor?.index).toBe(1);
+
+      getTokenTracker().drain(1, "codex", DEFAULT_TOKEN_BUCKET_CONFIG.maxTokens - 1);
+      manager.removeAccount(firstAccount!);
+
+      expect(survivor?.index).toBe(0);
+      expect(manager.consumeToken(survivor!, family)).toBe(true);
+      expect(getTokenTracker().getTokens(0, "codex")).toBe(0);
+      expect(getTokenTracker().getTokens(1, "codex")).toBe(DEFAULT_TOKEN_BUCKET_CONFIG.maxTokens);
+    });
+
     it("returns null when all accounts are rate-limited", () => {
       const family: ModelFamily = "codex";
 
