@@ -532,6 +532,53 @@ describe("OpenAIOAuthPlugin", () => {
 			expect(result.reason).toBe("invalid_response");
 			expect(vi.mocked(authModule.exchangeAuthorizationCode)).not.toHaveBeenCalled();
 		});
+
+		it("invalidates cached account manager after manual OAuth persistence", async () => {
+			const { AccountManager } = await import("../lib/accounts.js");
+			const authModule = await import("../lib/auth/auth.js");
+			const accountsModule = await import("../lib/accounts.js");
+			const loadFromDiskSpy = vi.spyOn(AccountManager, "loadFromDisk");
+
+			mockStorage.accounts = [{ refreshToken: "existing-refresh", email: "existing@example.com" }];
+
+			const getAuth = async () => ({
+				type: "oauth" as const,
+				access: "existing-access",
+				refresh: "existing-refresh",
+				expires: Date.now() + 60_000,
+				multiAccount: true,
+			});
+
+			await plugin.auth.loader(getAuth, { options: {}, models: {} });
+			loadFromDiskSpy.mockClear();
+
+			vi.mocked(authModule.exchangeAuthorizationCode).mockResolvedValueOnce({
+				type: "success",
+				access: "manual-access",
+				refresh: "manual-refresh",
+				expires: Date.now() + 60_000,
+				idToken: "manual-id-token",
+			});
+			vi.mocked(accountsModule.getAccountIdCandidates).mockReturnValueOnce([]);
+
+			const manualMethod = plugin.auth.methods[1] as unknown as {
+				authorize: () => Promise<{
+					callback: (input: string) => Promise<{ type: string }>;
+				}>;
+			};
+
+			const flow = await manualMethod.authorize();
+			const result = await flow.callback(
+				"http://127.0.0.1:1455/auth/callback?code=manual-code&state=test-state",
+			);
+
+			expect(result.type).toBe("success");
+			expect(mockStorage.accounts).toHaveLength(2);
+
+			await plugin.auth.loader(getAuth, { options: {}, models: {} });
+
+			expect(loadFromDiskSpy).toHaveBeenCalledTimes(1);
+		});
 	});
 
 	describe("event handler", () => {

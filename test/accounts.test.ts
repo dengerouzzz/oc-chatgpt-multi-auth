@@ -2530,6 +2530,76 @@ describe("AccountManager", () => {
       }
     });
 
+    it("retries a failed debounced save during flush even after pending state clears", async () => {
+      vi.useFakeTimers();
+      try {
+        const { saveAccounts } = await import("../lib/storage.js");
+        const mockSaveAccounts = vi.mocked(saveAccounts);
+        mockSaveAccounts.mockClear();
+
+        const savedSnapshots: Array<
+          Array<{
+            refreshToken?: string;
+            enabled?: false;
+            disabledReason?: string;
+          }>
+        > = [];
+
+        mockSaveAccounts.mockImplementationOnce(async (storage) => {
+          savedSnapshots.push(
+            storage.accounts.map((account) => ({
+              refreshToken: account.refreshToken,
+              enabled: account.enabled,
+              disabledReason: account.disabledReason,
+            })),
+          );
+          throw Object.assign(new Error("EBUSY: file in use"), { code: "EBUSY" });
+        });
+        mockSaveAccounts.mockImplementationOnce(async (storage) => {
+          savedSnapshots.push(
+            storage.accounts.map((account) => ({
+              refreshToken: account.refreshToken,
+              enabled: account.enabled,
+              disabledReason: account.disabledReason,
+            })),
+          );
+        });
+
+        const now = Date.now();
+        const stored = {
+          version: 3 as const,
+          activeIndex: 0,
+          accounts: [
+            { refreshToken: "token-1", addedAt: now, lastUsed: now },
+          ],
+        };
+
+        const manager = new AccountManager(undefined, stored);
+        const account = manager.getAccountsSnapshot()[0]!;
+
+        manager.disableAccountsWithSameRefreshToken(account);
+        manager.saveToDiskDebounced(0);
+        await vi.advanceTimersByTimeAsync(0);
+        await drainMicrotasks();
+
+        expect(mockSaveAccounts).toHaveBeenCalledTimes(1);
+        expect(manager.hasPendingSave()).toBe(false);
+
+        await manager.flushPendingSave();
+
+        expect(mockSaveAccounts).toHaveBeenCalledTimes(2);
+        expect(savedSnapshots[1]).toEqual([
+          expect.objectContaining({
+            refreshToken: "token-1",
+            enabled: false,
+            disabledReason: "auth-failure",
+          }),
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("drains saves queued during flush without overlapping writes", async () => {
       vi.useFakeTimers();
       try {

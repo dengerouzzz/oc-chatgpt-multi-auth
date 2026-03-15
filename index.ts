@@ -3867,6 +3867,7 @@ while (attempted.size < Math.max(1, accountCount)) {
 																await persistAccountPool(selection.variantsForPersistence, false, {
 																	reviveMatchingDisabledAccounts: true,
 																});
+																invalidateAccountManagerCache();
 														} catch (err) {
                                                                         const storagePath = getStoragePath();
                                                                         const errorCode = (err as NodeJS.ErrnoException)?.code || "UNKNOWN";

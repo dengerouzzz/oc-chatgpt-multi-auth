@@ -226,6 +226,7 @@ export class AccountManager {
 	private lastToastTime = 0;
 	private saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	private pendingSave: Promise<void> | null = null;
+	private saveRetryNeeded = false;
 	private authFailuresByRefreshToken: Map<string, number> = new Map();
 	private pendingSaveSettledWaiters = new Set<() => void>();
 	private saveFinalizationTick = 0;
@@ -1051,7 +1052,13 @@ export class AccountManager {
 					});
 				}
 			}
-			await saveOperation();
+			try {
+				await saveOperation();
+				this.saveRetryNeeded = false;
+			} catch (error) {
+				this.saveRetryNeeded = true;
+				throw error;
+			}
 		})().finally(() => {
 			if (this.pendingSave === nextSave) {
 				this.pendingSave = null;
@@ -1115,6 +1122,7 @@ export class AccountManager {
 	}
 
 	saveToDiskDebounced(delayMs = 500): void {
+		this.saveRetryNeeded = true;
 		if (this.saveDebounceTimer) {
 			clearTimeout(this.saveDebounceTimer);
 		}
@@ -1173,11 +1181,12 @@ export class AccountManager {
 					throwIfDeadlineExceeded();
 					continue;
 				}
+				const shouldRetryAfterPendingSave = hadDebouncedSave || this.saveRetryNeeded;
 				if (pendingSaveError) {
-					if (!hadDebouncedSave) {
+					if (!shouldRetryAfterPendingSave) {
 						throw pendingSaveError;
 					}
-					log.warn("flushPendingSave: ignoring pending-save failure to flush newer state", {
+					log.warn("flushPendingSave: retrying after save failure to flush latest state", {
 						error:
 							pendingSaveError instanceof Error
 								? pendingSaveError.message
@@ -1185,7 +1194,7 @@ export class AccountManager {
 					});
 				}
 			}
-			if (!hadDebouncedSave) {
+			if (!hadDebouncedSave && !this.saveRetryNeeded) {
 				return;
 			}
 			if (this.saveDebounceTimer !== null || this.pendingSave !== null) {
