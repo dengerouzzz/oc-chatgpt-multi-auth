@@ -2015,6 +2015,7 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 	let originalThreadId: string | undefined;
 
 	beforeEach(async () => {
+		vi.resetModules();
 		vi.clearAllMocks();
 		const configModule = await import("../lib/config.js");
 		vi.mocked(configModule.getPersistAccountFooter).mockReturnValue(false);
@@ -2805,7 +2806,7 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		).toBe("user2@example.com [2/2]");
 	});
 
-	it("falls back to the switch toast before the first footer session exists", async () => {
+	it("does not show the switch toast before the first footer session exists", async () => {
 		await enablePersistedFooter("full-email");
 		mockStorage.accounts = [
 			{ accountId: "acc-1", email: "user@example.com", refreshToken: "refresh-token" },
@@ -2819,7 +2820,7 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 			event: { type: "account.select", properties: { index: 1 } },
 		});
 
-		expect(mockClient.tui.showToast).toHaveBeenCalledWith({
+		expect(mockClient.tui.showToast).not.toHaveBeenCalledWith({
 			body: {
 				message: "Switched to account 2",
 				variant: "info",
@@ -3020,6 +3021,34 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		await expect(autoMethod.authorize({ loginMode: "add", accountCount: "1" })).resolves.toBeDefined();
 
 		expect(configModule.loadPluginConfig).toHaveBeenCalledTimes(1);
+		expect(storageModule.setStoragePath).toHaveBeenCalledWith(process.cwd());
+	});
+
+	it("retries a pre-loader authorize refresh when the first authorize config falls back to defaults", async () => {
+		const configModule = await import("../lib/config.js");
+		const storageModule = await import("../lib/storage.js");
+		const recoveredConfig = { source: "recovered-config" };
+
+		vi.mocked(configModule.loadPluginConfig)
+			.mockReturnValueOnce(configModule.DEFAULT_CONFIG)
+			.mockReturnValueOnce(configModule.DEFAULT_CONFIG)
+			.mockReturnValueOnce(recoveredConfig);
+		vi.mocked(configModule.getPerProjectAccounts).mockImplementation(
+			(config) => config === recoveredConfig,
+		);
+
+		const mockClient = createMockClient();
+		const { OpenAIOAuthPlugin } = await import("../index.js");
+		const plugin = await OpenAIOAuthPlugin({ client: mockClient } as never) as unknown as PluginType;
+		const autoMethod = plugin.auth.methods[0] as unknown as {
+			authorize: (inputs?: Record<string, string>) => Promise<unknown>;
+		};
+
+		vi.mocked(storageModule.setStoragePath).mockClear();
+
+		await expect(autoMethod.authorize({ loginMode: "add", accountCount: "1" })).resolves.toBeDefined();
+
+		expect(configModule.loadPluginConfig).toHaveBeenCalledTimes(3);
 		expect(storageModule.setStoragePath).toHaveBeenCalledWith(process.cwd());
 	});
 

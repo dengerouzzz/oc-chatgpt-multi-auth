@@ -1462,7 +1462,11 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 			// routing auth writes to the wrong storage path.
 			let storagePluginConfig =
 				initialConfig ?? runtimePluginConfigSnapshot ?? DEFAULT_CONFIG;
-			if (!initialConfig) {
+			const shouldRefreshStorageConfig =
+				!initialConfig ||
+				(initialConfig === DEFAULT_CONFIG &&
+					runtimePluginConfigSnapshot === initialConfig);
+			if (shouldRefreshStorageConfig) {
 				try {
 					const refreshedPluginConfig = loadPluginConfig();
 					if (
@@ -1954,17 +1958,16 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 									accountManagerPromise = Promise.resolve(reloadedManager);
 								}
 
-								const refreshedVisibleIndicator = runtimePersistAccountFooter
-									? refreshVisiblePersistedAccountIndicators(
-											// Prefer the pre-reload target account so label-only footers keep
-											// the same token-derived id suffix until disk catches up.
-											preReloadTargetAccount ?? account,
-											index,
-											storage.accounts.length,
-											runtimePersistAccountFooterStyle,
-										)
-									: false;
-								if (!runtimePersistAccountFooter || !refreshedVisibleIndicator) {
+								if (runtimePersistAccountFooter) {
+									refreshVisiblePersistedAccountIndicators(
+										// Prefer the pre-reload target account so label-only footers keep
+										// the same token-derived id suffix until disk catches up.
+										preReloadTargetAccount ?? account,
+										index,
+										storage.accounts.length,
+										runtimePersistAccountFooterStyle,
+									);
+								} else {
 									await showToast(`Switched to account ${index + 1}`, "info");
 								}
                         }
