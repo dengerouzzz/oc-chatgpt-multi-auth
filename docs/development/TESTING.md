@@ -39,7 +39,7 @@ Current PR automation is split into required and advisory lanes:
 
 - Required `required-pr`: aggregates `lint`, `typecheck`, `build`, `unit (linux)`, and `unit (windows)` for the default Node version, plus `docs-sanity` for Markdown changes and `actionlint` when workflows change.
 - Required `pr-governance`: enforces the pull request template, compliance checkbox, and a completed live-verification marker for auth/request/storage changes.
-- Advisory `PR Advisory`: runs `npm run test:coverage`, a wider compatibility matrix (Ubuntu Node 18 and 22 plus macOS on the default Node version), and `npm run audit:ci`.
+- Advisory `PR Advisory`: runs `npm run test:coverage`, a wider compatibility matrix (Ubuntu Node 18 and 22, macOS on the default Node version, and Windows Node 18), and `npm run audit:ci`.
 
 Notes on the advisory lane:
 

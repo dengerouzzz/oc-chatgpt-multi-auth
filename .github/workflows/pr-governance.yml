@@ -38,8 +38,9 @@ jobs:
             const issueNumber = context.payload.pull_request.number;
             const body = context.payload.pull_request.body || "";
             const strippedBody = body
-              .replace(/```[\s\S]*?```/g, "")
-              .replace(/`[^`\n]+`/g, "");
+              .replace(/<!--[\s\S]*?-->/g, "")
+              .replace(/(^|\n)(?: {0,3})(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n(?: {0,3})\2[^\n]*(?=\n|$)/g, "$1")
+              .replace(/(`+)([^`\n]|`(?!\1))*\1/g, "");
             const liveLabels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
               owner,
               repo,
