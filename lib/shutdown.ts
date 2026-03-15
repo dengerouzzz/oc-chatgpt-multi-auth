@@ -64,9 +64,6 @@ function ensureShutdownHandler(): void {
 		}
 		signalExitPending = true;
 		let exitRequested = false;
-		let timeoutHandle: ReturnType<typeof setTimeout> | null = setTimeout(() => {
-			requestExit();
-		}, SIGNAL_CLEANUP_TIMEOUT_MS);
 		const requestExit = () => {
 			if (exitRequested) {
 				return;
@@ -78,6 +75,9 @@ function ensureShutdownHandler(): void {
 			}
 			process.exit(0);
 		};
+		let timeoutHandle: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+			requestExit();
+		}, SIGNAL_CLEANUP_TIMEOUT_MS);
 		void runCleanup().finally(() => {
 			requestExit();
 		});
