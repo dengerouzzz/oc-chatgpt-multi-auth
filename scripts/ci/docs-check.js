@@ -248,7 +248,7 @@ export function extractMarkdownLinks(markdown) {
 		.replace(/`[^`\n]+`/g, "`code`");
 	const openerPattern = /!?\[[^\]]*]\(/g;
 	const referencePattern = /!?\[([^\]]+)]\[([^\]]*)]/g;
-	const shortcutReferencePattern = /!?\[([^\]]+)](?![\[(]:)/g;
+	const shortcutReferencePattern = /(?<!])!?\[([^\]]+)](?![\[(]|:)/g;
 	const referenceDefinitionPattern = /^\s{0,3}\[([^\]]+)]:\s+(.+)$/gm;
 	const links = [];
 	const referenceDefinitions = new Map();

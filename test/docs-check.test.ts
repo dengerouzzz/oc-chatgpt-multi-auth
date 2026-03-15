@@ -267,6 +267,22 @@ describe("docs-check script", () => {
 		await expect(validateLink(docsFile, referenceTarget)).resolves.toBe("Missing local target: ./targets/missing.md");
 	});
 
+	it("does not treat inline or full reference links as shortcut references", async () => {
+		const { extractMarkdownLinks } = await import("../scripts/ci/docs-check.js");
+
+		const markdown = [
+			"[Inline](./targets/inline.md)",
+			"[Config][cfg]",
+			"",
+			"[inline]: ./targets/inline-shortcut.md",
+			"[cfg]: ./targets/full.md",
+			"[config]: ./targets/full-shortcut.md",
+			"",
+		].join("\n");
+
+		expect(extractMarkdownLinks(markdown)).toEqual(["./targets/inline.md", "./targets/full.md"]);
+	});
+
 	it("ignores links that only appear inside HTML comments", async () => {
 		const { extractMarkdownLinks } = await import("../scripts/ci/docs-check.js");
 
