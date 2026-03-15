@@ -267,4 +267,30 @@ describe("docs-check script", () => {
 		expect(stdout).toContain("docs-check: no markdown files found");
 		expect(stderr).toBe("");
 	});
+
+	it("exits with an error when the direct docs-check pipeline finds broken links", async () => {
+		const { root } = await createRepoFixture({
+			"docs/guide.md": "[Missing](./targets/missing.md)\n",
+		});
+		const scriptPath = path.resolve(process.cwd(), "scripts/ci/docs-check.js");
+		const relativeFixtureRoot = path.relative(process.cwd(), root).replace(/\\/g, "/");
+		let failure: (Error & { code?: number; stderr?: string; stdout?: string }) | null = null;
+
+		try {
+			await execFileAsync(process.execPath, [scriptPath, relativeFixtureRoot], {
+				cwd: process.cwd(),
+			});
+		} catch (error) {
+			if (error instanceof Error) {
+				failure = error as Error & { code?: number; stderr?: string; stdout?: string };
+			} else {
+				throw error;
+			}
+		}
+
+		expect(failure).not.toBeNull();
+		expect(failure?.code).toBe(1);
+		expect(failure?.stderr).toContain("docs-check found broken documentation links:");
+		expect(failure?.stderr).toContain("docs/guide.md: Missing local target: ./targets/missing.md (./targets/missing.md)");
+	});
 });
