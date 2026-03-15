@@ -31,6 +31,8 @@ afterEach(async () => {
 async function createDocsFixture(markdown = "# Guide\n") {
 	// docs-check resolves local links against process.cwd(), so fixtures must live
 	// under the repo root for relative-link validation to exercise real behavior.
+	// .gitignore excludes tmp/ and tmp* so a leftover retry-cleanup fixture does
+	// not pollute git status if Windows holds a transient lock on removal.
 	const repoTempDir = path.join(process.cwd(), "tmp");
 	await mkdir(repoTempDir, { recursive: true });
 

@@ -253,6 +253,7 @@ jobs:
       - actionlint
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Evaluate required checks
         shell: bash

@@ -152,7 +152,7 @@ jobs:
           - os: ubuntu-latest
             node: 22
           - os: macos-latest
-            node: 20
+            node: 20 # Intentionally pins the current default advisory lane; update when .nvmrc changes.
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
