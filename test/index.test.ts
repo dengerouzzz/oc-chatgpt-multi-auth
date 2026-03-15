@@ -2484,6 +2484,46 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 		).toBe(expectedFullIndicator);
 	});
 
+	it("ignores transform outputs when there are no messages", async () => {
+		await enablePersistedFooter("full-email");
+		const { plugin } = await setupPlugin();
+
+		const output: Parameters<PluginType["experimental.chat.messages.transform"]>[1] = {
+			messages: [],
+		};
+
+		await expect(
+			plugin["experimental.chat.messages.transform"]({}, output),
+		).resolves.toBeUndefined();
+		expect(output.messages).toEqual([]);
+	});
+
+	it("ignores transform outputs when no user message is present", async () => {
+		await enablePersistedFooter("full-email");
+		const { plugin, sdk } = await setupPlugin();
+
+		await sendPersistedAccountRequest(sdk, "session-assistant-only");
+
+		const output: Parameters<PluginType["experimental.chat.messages.transform"]>[1] = {
+			messages: [
+				{
+					info: {
+						role: "assistant",
+						sessionID: "session-assistant-only",
+						model: { providerID: "openai", modelID: "gpt-5.1" },
+					},
+					parts: [],
+				},
+			],
+		};
+
+		await expect(
+			plugin["experimental.chat.messages.transform"]({}, output),
+		).resolves.toBeUndefined();
+		expect(output.messages[0]?.info.variant).toBeUndefined();
+		expect(output.messages[0]?.info.model?.variant).toBeUndefined();
+	});
+
 	it("prefers CODEX_THREAD_ID over a non-empty transform session id when looking up the footer", async () => {
 		await enablePersistedFooter("full-email");
 		process.env.CODEX_THREAD_ID = "env-transform-priority";
@@ -3459,6 +3499,27 @@ describe("OpenAIOAuthPlugin fetch handler", () => {
 				duration: 5000,
 			},
 		});
+		consumeSpy.mockRestore();
+	});
+
+	it("still returns a terminal 503 when the TUI toast channel throws", async () => {
+		const { AccountManager } = await import("../lib/accounts.js");
+		const consumeSpy = vi.spyOn(AccountManager.prototype, "consumeToken").mockReturnValue(false);
+		globalThis.fetch = vi.fn().mockResolvedValue(
+			new Response(JSON.stringify({ content: "should-not-be-returned" }), { status: 200 }),
+		);
+
+		const { sdk, mockClient } = await setupPlugin();
+		mockClient.tui.showToast.mockRejectedValue(new Error("tui closed"));
+
+		const response = await sdk.fetch!("https://api.openai.com/v1/chat", {
+			method: "POST",
+			body: JSON.stringify({ model: "gpt-5.1" }),
+		});
+
+		expect(globalThis.fetch).not.toHaveBeenCalled();
+		expect(response.status).toBe(503);
+		expect(await response.text()).toContain("server errors or auth issues");
 		consumeSpy.mockRestore();
 	});
 

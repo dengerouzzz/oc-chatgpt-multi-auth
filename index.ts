@@ -1204,6 +1204,9 @@ export const OpenAIOAuthPlugin: Plugin = async ({ client }: PluginInput) => {
 		};
 
 		const trimPersistedAccountIndicators = (): void => {
+			// setPersistedAccountIndicator() is the only insertion path and adds at
+			// most one new entry per call, so a single oldest-entry eviction is
+			// sufficient to restore the cap.
 			if (persistedAccountIndicators.size > MAX_PERSISTED_ACCOUNT_INDICATORS) {
 				const oldestKey = persistedAccountIndicators.keys().next().value;
 				if (oldestKey === undefined) return;
