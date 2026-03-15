@@ -39,10 +39,42 @@ jobs:
             const repo = context.repo.repo;
             const issueNumber = context.payload.pull_request.number;
             const body = context.payload.pull_request.body || "";
-            const strippedBody = body
-              .replace(/<!--[\s\S]*?-->/g, "")
-              .replace(/(^|\n)(?: {0,3})(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n(?: {0,3})\2[^\n]*(?=\n|$)/g, "$1")
-              .replace(/(`+)([^`\n]|`(?!\1))*\1/g, "");
+            function stripMarkdownCode(markdown) {
+              const output = [];
+              const lines = markdown.split(/\r?\n/);
+              let inFence = false;
+              let fenceChar = "";
+              let fenceLength = 0;
+
+              for (const line of lines) {
+                if (!inFence) {
+                  const openingFence = line.match(/^(?: {0,3})(`{3,}|~{3,})[^\n]*$/);
+                  if (openingFence) {
+                    inFence = true;
+                    fenceChar = openingFence[1][0];
+                    fenceLength = openingFence[1].length;
+                    output.push("");
+                    continue;
+                  }
+
+                  output.push(line);
+                  continue;
+                }
+
+                const closingFence = new RegExp(`^(?: {0,3})${fenceChar}{${fenceLength},}[^\\n]*$`);
+                if (closingFence.test(line)) {
+                  inFence = false;
+                  fenceChar = "";
+                  fenceLength = 0;
+                }
+
+                output.push("");
+              }
+
+              return output.join("\n").replace(/(`+)([^`\n]|`(?!\1))*\1/g, "");
+            }
+
+            const strippedBody = stripMarkdownCode(body.replace(/<!--[\s\S]*?-->/g, ""));
             const liveLabels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
               owner,
               repo,
