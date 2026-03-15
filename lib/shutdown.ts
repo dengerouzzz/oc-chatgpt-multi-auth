@@ -1,5 +1,7 @@
 type CleanupFn = () => void | Promise<void>;
 
+const SIGNAL_CLEANUP_TIMEOUT_MS = 5_000;
+
 const cleanupFunctions: CleanupFn[] = [];
 let shutdownRegistered = false;
 let sigintHandler: (() => void) | null = null;
@@ -61,8 +63,23 @@ function ensureShutdownHandler(): void {
 			return;
 		}
 		signalExitPending = true;
-		void runCleanup().finally(() => {
+		let exitRequested = false;
+		let timeoutHandle: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+			requestExit();
+		}, SIGNAL_CLEANUP_TIMEOUT_MS);
+		const requestExit = () => {
+			if (exitRequested) {
+				return;
+			}
+			exitRequested = true;
+			if (timeoutHandle) {
+				clearTimeout(timeoutHandle);
+				timeoutHandle = null;
+			}
 			process.exit(0);
+		};
+		void runCleanup().finally(() => {
+			requestExit();
 		});
 	};
 	sigintHandler = handleSignal;

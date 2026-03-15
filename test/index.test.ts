@@ -4138,6 +4138,19 @@ describe("OpenAIOAuthPlugin persistAccountPool", () => {
 			expect(consoleLog).toHaveBeenCalledWith(
 				expect.stringContaining("Run 'opencode auth login' to re-enable with fresh credentials."),
 			);
+			expect(mockClient.tui.showToast).toHaveBeenCalledWith({
+				body: expect.objectContaining({
+					message:
+						"This account was disabled after repeated auth failures. Run 'opencode auth login' to re-enable with fresh credentials.",
+					variant: "warning",
+				}),
+			});
+			expect(vi.mocked(loggerModule.logInfo)).toHaveBeenCalledWith(
+				"[account-menu] prompted re-auth for auth-failure disabled account",
+				expect.objectContaining({
+					accountId: "workspace-auth-failure",
+				}),
+			);
 			expect(vi.mocked(loggerModule.logWarn)).toHaveBeenCalledWith(
 				"[account-menu] blocked re-enable for auth-failure disabled account",
 				expect.objectContaining({

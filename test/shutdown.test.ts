@@ -235,6 +235,48 @@ describe("Graceful shutdown", () => {
 			}
 		});
 
+		it("forces exit if signal cleanup stalls past the timeout", async () => {
+			vi.useFakeTimers();
+			const capturedHandlers = new Map<string, (...args: unknown[]) => void>();
+
+			const processOnSpy = vi.spyOn(process, "on").mockImplementation((event: string | symbol, handler: (...args: unknown[]) => void) => {
+				capturedHandlers.set(String(event), handler);
+				return process;
+			});
+			const processExitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+			vi.resetModules();
+			const { registerCleanup: freshRegister, runCleanup: freshRunCleanup } = await import("../lib/shutdown.js");
+			await freshRunCleanup();
+
+			const cleanupFn = vi.fn(async () => {
+				await new Promise<void>(() => {
+					// Intentionally never resolves so the timeout path can force exit.
+				});
+			});
+			freshRegister(cleanupFn);
+
+			try {
+				const sigtermHandler = capturedHandlers.get("SIGTERM");
+				expect(sigtermHandler).toBeDefined();
+
+				sigtermHandler!();
+				await Promise.resolve();
+
+				expect(cleanupFn).toHaveBeenCalledTimes(1);
+				expect(processExitSpy).not.toHaveBeenCalled();
+
+				await vi.advanceTimersByTimeAsync(5_000);
+
+				expect(processExitSpy).toHaveBeenCalledTimes(1);
+				expect(processExitSpy).toHaveBeenCalledWith(0);
+			} finally {
+				vi.useRealTimers();
+				processOnSpy.mockRestore();
+				processExitSpy.mockRestore();
+			}
+		});
+
 		it("keeps later signals ignored after cleanup completes until process exit", async () => {
 			const capturedHandlers = new Map<string, (...args: unknown[]) => void>();
 
