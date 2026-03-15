@@ -77,13 +77,16 @@ jobs:
 
             const missingSections = requiredHeadings.filter((pattern) => !pattern.test(body));
             const complianceChecked = /- \[x\] This change stays within the repository scope and OpenAI Terms of Service expectations\./i.test(body);
+            const docsImpactChecked =
+              /- \[x\] README or docs updated/i.test(body) ||
+              /- \[x\] No docs changes needed/i.test(body);
             const officialAuthChecked = /- \[x\] This change uses official authentication flows only and does not add bypass, scraping, or credential-sharing behavior\./i.test(body);
             const testsDocsChecked = /- \[x\] I updated tests and documentation when the change affected users, maintainers, or repository behavior\./i.test(body);
             const noLiveRequiredChecked = /- \[x\] No auth, request-routing, or storage paths changed\./i.test(body);
             const manualLiveChecked = /- \[x\] I manually tested with a real ChatGPT Plus\/Pro account\./i.test(body);
             const liveVerificationLabelName = "needs-live-verification";
             const maintainerVerifiedLabelName = "maintainer-live-verified";
-            const maintainerLiveVerified = currentLabels.has(maintainerVerifiedLabelName);
+            let maintainerLiveVerified = currentLabels.has(maintainerVerifiedLabelName);
 
             async function ensureLabel(name, color, description) {
               try {
@@ -124,6 +127,20 @@ jobs:
                 issue_number: issueNumber,
                 labels: [liveVerificationLabelName],
               });
+
+              if (context.payload.action === "synchronize" && maintainerLiveVerified) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    name: maintainerVerifiedLabelName,
+                  });
+                } catch (error) {
+                  if (error.status !== 404) throw error;
+                }
+                maintainerLiveVerified = false;
+              }
             } else {
               try {
                 await github.rest.issues.removeLabel({
@@ -145,6 +162,10 @@ jobs:
 
             if (!complianceChecked) {
               failures.push("The compliance checkbox must be checked.");
+            }
+
+            if (!docsImpactChecked) {
+              failures.push("Check one of the Docs Impact options.");
             }
 
             if (!officialAuthChecked) {
